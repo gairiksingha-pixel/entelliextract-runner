@@ -256,7 +256,3 @@ npm start report       # expect 0 if last run existed, else 1
 ## Resumable Execution
 
 If a run is interrupted, start again with the same config. The stub loads the checkpoint and skips files already marked `done`, so only remaining (or failed) files are processed.
-
-## License
-
-MIT
