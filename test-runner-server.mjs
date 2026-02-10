@@ -7,13 +7,87 @@
 
 import { createServer } from 'node:http';
 import { spawn } from 'node:child_process';
-import { readFileSync, readdirSync, writeFileSync, existsSync, copyFileSync } from 'node:fs';
-import { join, dirname, extname, normalize, resolve } from 'node:path';
+import { readFileSync, readdirSync, writeFileSync, existsSync, copyFileSync, statSync } from 'node:fs';
+import { join, dirname, extname, normalize, resolve, relative } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const PORT = 8765;
 const ROOT = join(__dirname);
+const REPORTS_DIR = join(ROOT, 'output', 'reports');
+const STAGING_DIR = join(ROOT, 'output', 'staging');
+const SYNC_MANIFEST_PATH = join(ROOT, 'output', 'checkpoints', 'sync-manifest.json');
+const ALLOWED_EXT = new Set(['.md', '.html', '.json']);
+
+function listStagingFiles(dir, baseDir, list) {
+  if (!existsSync(dir)) return list;
+  const entries = readdirSync(dir, { withFileTypes: true });
+  const base = baseDir || dir;
+  for (const e of entries) {
+    const full = join(dir, e.name);
+    const rel = relative(base, full).replace(/\\/g, '/');
+    if (e.isDirectory()) {
+      listStagingFiles(full, base, list);
+    } else {
+      let size = 0;
+      let mtime = 0;
+      try {
+        const st = statSync(full);
+        size = st.size;
+        mtime = st.mtimeMs;
+      } catch (_) {}
+      list.push({ path: rel, size, mtime });
+    }
+  }
+  return list;
+}
+
+function buildSyncReportHtml() {
+  const files = listStagingFiles(STAGING_DIR, STAGING_DIR, []);
+  files.sort((a, b) => b.mtime - a.mtime);
+  let manifestEntries = 0;
+  if (existsSync(SYNC_MANIFEST_PATH)) {
+    try {
+      const raw = readFileSync(SYNC_MANIFEST_PATH, 'utf-8');
+      const data = JSON.parse(raw);
+      manifestEntries = typeof data === 'object' && data !== null ? Object.keys(data).length : 0;
+    } catch (_) {}
+  }
+  const formatDate = (ms) => {
+    if (!ms) return '—';
+    const d = new Date(ms);
+    return d.toISOString();
+  };
+  const rows = files.map(
+    (f) =>
+      `<tr><td>${escapeHtml(f.path)}</td><td>${f.size}</td><td>${formatDate(f.mtime)}</td></tr>`
+  ).join('');
+  return `<!DOCTYPE html>
+<html lang="en">
+<head><meta charset="UTF-8"><title>Sync Report</title>
+<style>body{font-family:system-ui,sans-serif;margin:1rem 2rem;} table{border-collapse:collapse;width:100%;} th,td{border:1px solid #ddd;padding:0.5rem;text-align:left;} th{background:#f5f5f5;} .meta{margin-bottom:1rem;}</style>
+</head>
+<body>
+<h1>Sync Report</h1>
+<div class="meta"><p>Generated: ${new Date().toISOString()}</p>
+<p>Manifest entries (tracked keys): ${manifestEntries}</p>
+<p>Files in staging: ${files.length}</p></div>
+<table>
+<thead><tr><th>Path (staging)</th><th>Size (bytes)</th><th>Modified</th></tr></thead>
+<tbody>${rows || '<tr><td colspan="3">No synced files.</td></tr>'}</tbody>
+</table>
+</body>
+</html>`;
+}
+
+function escapeHtml(s) {
+  if (typeof s !== 'string') return '';
+  return s
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;');
+}
 
 function getLastRunId() {
   const path = join(ROOT, 'output', 'checkpoints', 'last-run-id.txt');
@@ -266,6 +340,91 @@ createServer(async (req, res) => {
       currentChild = null;
       writeLine({ type: 'result', ...result });
       res.end();
+    } catch (e) {
+      res.writeHead(500, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ error: String(e.message) }));
+    }
+    return;
+  }
+  if (req.method === 'GET' && url === '/api/reports') {
+    try {
+      const list = { md: [], html: [], json: [] };
+      if (!existsSync(REPORTS_DIR)) {
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify(list));
+        return;
+      }
+      const files = readdirSync(REPORTS_DIR, { withFileTypes: true })
+        .filter((e) => e.isFile() && ALLOWED_EXT.has(extname(e.name).toLowerCase()));
+      for (const f of files) {
+        const ext = extname(f.name).toLowerCase();
+        const key = ext === '.md' ? 'md' : ext === '.html' ? 'html' : 'json';
+        let mtime = 0;
+        try {
+          mtime = statSync(join(REPORTS_DIR, f.name)).mtimeMs;
+        } catch (_) {}
+        list[key].push({ name: f.name, mtime });
+      }
+      for (const key of Object.keys(list)) {
+        list[key].sort((a, b) => b.mtime - a.mtime);
+      }
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify(list));
+    } catch (e) {
+      res.writeHead(500, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ error: String(e.message) }));
+    }
+    return;
+  }
+  if (req.method === 'GET' && url.startsWith('/api/reports/')) {
+    const rest = url.slice('/api/reports/'.length);
+    const slash = rest.indexOf('/');
+    const format = slash === -1 ? rest : rest.slice(0, slash);
+    const filename = slash === -1 ? null : rest.slice(slash + 1);
+    if (!filename || !['md', 'html', 'json'].includes(format)) {
+      res.writeHead(400, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ error: 'Invalid format or filename' }));
+      return;
+    }
+    const ext = format === 'md' ? '.md' : format === 'html' ? '.html' : '.json';
+    if (!filename.endsWith(ext) || filename.includes('..') || /[\\/]/.test(filename)) {
+      res.writeHead(400, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ error: 'Invalid filename' }));
+      return;
+    }
+    const filePath = resolve(REPORTS_DIR, filename);
+    if (!filePath.startsWith(resolve(REPORTS_DIR))) {
+      res.writeHead(403);
+      res.end();
+      return;
+    }
+    try {
+      if (!existsSync(filePath)) {
+        res.writeHead(404, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ error: 'Not found' }));
+        return;
+      }
+      const content = readFileSync(filePath, 'utf-8');
+      const contentType = format === 'html' ? 'text/html' : format === 'json' ? 'application/json' : 'text/markdown';
+      res.writeHead(200, {
+        'Content-Type': contentType,
+        'Content-Disposition': 'attachment; filename="' + filename.replace(/"/g, '\\"') + '"',
+      });
+      res.end(content);
+    } catch (e) {
+      res.writeHead(500, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ error: String(e.message) }));
+    }
+    return;
+  }
+  if (req.method === 'GET' && url === '/api/sync-report') {
+    try {
+      const html = buildSyncReportHtml();
+      res.writeHead(200, {
+        'Content-Type': 'text/html',
+        'Content-Disposition': 'attachment; filename="sync-report.html"',
+      });
+      res.end(html);
     } catch (e) {
       res.writeHead(500, { 'Content-Type': 'application/json' });
       res.end(JSON.stringify({ error: String(e.message) }));

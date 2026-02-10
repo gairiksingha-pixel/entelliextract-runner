@@ -230,9 +230,63 @@
       }
       .run-cell .btn-group {
         display: flex;
+        flex-direction: column;
+        gap: 0.35rem;
+        align-items: stretch;
+      }
+      .run-cell .btn-row {
+        display: flex;
         gap: 0.35rem;
         justify-content: center;
-        flex-wrap: wrap;
+      }
+      .btn-row-download {
+        display: flex;
+        gap: 0.35rem;
+        width: 100%;
+      }
+      .btn-row-download button {
+        flex: 1;
+        min-width: 0;
+      }
+      button.download-sync-report-btn {
+        background: #5c6bc0;
+        color: #fff;
+        border: none;
+        padding: 0.4rem 0.75rem;
+        border-radius: 4px;
+        font-size: 0.8rem;
+        font-weight: 600;
+        cursor: pointer;
+        font-family: inherit;
+        box-sizing: border-box;
+      }
+      button.download-sync-report-btn:hover {
+        background: #4a56a8;
+        color: #fff;
+      }
+      button.download-sync-report-btn:disabled {
+        opacity: 0.6;
+        cursor: not-allowed;
+      }
+      button.download-report-btn {
+        background: var(--accent);
+        color: #fff;
+        border: none;
+        padding: 0.4rem 0.75rem;
+        border-radius: 4px;
+        font-size: 0.8rem;
+        font-weight: 600;
+        cursor: pointer;
+        font-family: inherit;
+        box-sizing: border-box;
+      }
+      button.download-report-btn:hover {
+        background: #00897b;
+        color: #fff;
+      }
+      button.download-report-btn:disabled {
+        opacity: 0.6;
+        cursor: not-allowed;
       }
       .result-header {
         width: 38rem;
@@ -695,9 +749,27 @@
           escapeHtml(c.expected) +
           "</td>" +
           renderLimitsCell(c) +
-          '<td class="run-cell"><div class="btn-group"></div></td>';
-        tr.querySelector(".btn-group").appendChild(btn);
-        tr.querySelector(".btn-group").appendChild(resetBtn);
+          '<td class="run-cell"><div class="btn-group"><div class="btn-row"></div><div class="btn-row-download"></div></div></td>';
+        tr.querySelector(".btn-row").appendChild(btn);
+        tr.querySelector(".btn-row").appendChild(resetBtn);
+        const downloadSyncReportBtn = document.createElement("button");
+        downloadSyncReportBtn.className = "download-sync-report-btn";
+        downloadSyncReportBtn.textContent = "Download Sync Report";
+        downloadSyncReportBtn.type = "button";
+        downloadSyncReportBtn.style.display = "none";
+        downloadSyncReportBtn.onclick = function () {
+          downloadSyncReport(downloadSyncReportBtn);
+        };
+        tr.querySelector(".btn-row-download").appendChild(downloadSyncReportBtn);
+        const downloadReportBtn = document.createElement("button");
+        downloadReportBtn.className = "download-report-btn";
+        downloadReportBtn.textContent = "Download Report";
+        downloadReportBtn.type = "button";
+        downloadReportBtn.style.display = "none";
+        downloadReportBtn.onclick = function () {
+          downloadLatestHtmlReport(downloadReportBtn);
+        };
+        tr.querySelector(".btn-row-download").appendChild(downloadReportBtn);
         tr.appendChild(resultCell);
         return tr;
       }
@@ -708,11 +780,24 @@
         return div.innerHTML;
       }
 
-      function showResult(div, data, pass, progress, syncProgress) {
+      function showResult(div, data, pass, progress, syncProgress, caseId) {
         div.style.display = "block";
         var resultClass = "running";
         if (data) resultClass = pass ? "pass" : "fail";
         div.className = "result " + resultClass;
+        var row = div.closest("tr");
+        var syncCases = ["P1", "P5", "N6", "E4", "E5", "P7"];
+        var extractCases = ["P2", "P3", "P4", "P6", "P7", "E1", "E2", "E3", "E6", "E7", "E8"];
+        var showSync = data && pass && caseId && syncCases.includes(caseId);
+        var showExtract = data && pass && caseId && extractCases.includes(caseId);
+        var downloadSyncReportBtn = row ? row.querySelector(".download-sync-report-btn") : null;
+        var downloadReportBtn = row ? row.querySelector(".download-report-btn") : null;
+        if (downloadSyncReportBtn) {
+          downloadSyncReportBtn.style.display = showSync ? "block" : "none";
+        }
+        if (downloadReportBtn) {
+          downloadReportBtn.style.display = showExtract ? "block" : "none";
+        }
         if (!data) {
           var label;
           var extra = "";
@@ -790,6 +875,10 @@
           inputs.forEach(function (input) {
             input.value = "0";
           });
+          var downloadSyncReportBtn = row.querySelector(".download-sync-report-btn");
+          var downloadReportBtn = row.querySelector(".download-report-btn");
+          if (downloadSyncReportBtn) downloadSyncReportBtn.style.display = "none";
+          if (downloadReportBtn) downloadReportBtn.style.display = "none";
         }
       }
 
@@ -920,24 +1009,30 @@
             } catch (_) {}
           }
           if (!data) {
-            showResult(resultDiv, { exitCode: 1, stdout: "", stderr: "No result from server" }, false);
+            showResult(resultDiv, { exitCode: 1, stdout: "", stderr: "No result from server" }, false, null, null, caseId);
             return;
           }
           var expectFail = caseId.indexOf("N") === 0;
           var pass = expectFail ? data.exitCode !== 0 : data.exitCode === 0;
-          showResult(resultDiv, data, pass);
+          showResult(resultDiv, data, pass, null, null, caseId);
         } catch (e) {
           if (e.name === "AbortError") {
             showResult(
               resultDiv,
               { exitCode: 130, stdout: "", stderr: "Stopped by user." },
               false,
+              null,
+              null,
+              caseId,
             );
           } else {
             showResult(
               resultDiv,
               { exitCode: 1, stdout: "", stderr: e.message },
               false,
+              null,
+              null,
+              caseId,
             );
           }
         } finally {
@@ -952,6 +1047,50 @@
           tbody.appendChild(renderRow(c, section));
         });
       });
+
+      function downloadSyncReport(btn) {
+        if (btn) btn.disabled = true;
+        fetch("/api/sync-report")
+          .then(function (r) { return r.blob(); })
+          .then(function (blob) {
+            var a = document.createElement("a");
+            a.href = URL.createObjectURL(blob);
+            a.download = "sync-report.html";
+            a.click();
+            URL.revokeObjectURL(a.href);
+          })
+          .catch(function () {})
+          .then(function () {
+            if (btn) btn.disabled = false;
+          });
+      }
+
+      function downloadLatestHtmlReport(btn) {
+        if (btn) btn.disabled = true;
+        fetch("/api/reports")
+          .then(function (r) { return r.json(); })
+          .then(function (list) {
+            var htmlReports = list.html || [];
+            if (htmlReports.length === 0) {
+              if (btn) btn.disabled = false;
+              return;
+            }
+            var latest = htmlReports[0];
+            var filename = latest.name;
+            var url = "/api/reports/html/" + encodeURIComponent(filename);
+            return fetch(url).then(function (r) { return r.blob(); }).then(function (blob) {
+              var a = document.createElement("a");
+              a.href = URL.createObjectURL(blob);
+              a.download = filename;
+              a.click();
+              URL.revokeObjectURL(a.href);
+            });
+          })
+          .catch(function () {})
+          .then(function () {
+            if (btn) btn.disabled = false;
+          });
+      }
 
       var BRAND_PURCHASERS = {
         "no-cow-026090539970-prod": ["DOT_FOODS", "KEHE", "UNFI"],
