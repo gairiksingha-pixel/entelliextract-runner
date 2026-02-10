@@ -4,7 +4,7 @@
  */
 
 import PQueue from 'p-queue';
-import { readFileSync, existsSync, readdirSync, mkdirSync, writeFileSync, rmSync } from 'node:fs';
+import { readFileSync, existsSync, readdirSync, mkdirSync, writeFileSync } from 'node:fs';
 import { join, relative, dirname } from 'node:path';
 import type { Config, CheckpointRecord, S3BucketConfig } from './types.js';
 import { extract, getExtractUploadUrl } from './api-client.js';
@@ -92,9 +92,6 @@ export async function runExtraction(
   const runId = getOrCreateRunId(db);
   const completed = config.run.skipCompleted ? getCompletedPaths(db, runId) : new Set<string>();
   initRequestResponseLogger(config, runId);
-
-  const extractionsDir = join(dirname(config.report.outputDir), 'extractions', runId);
-  if (existsSync(extractionsDir)) rmSync(extractionsDir, { recursive: true });
 
   const buckets =
     options?.tenant && options?.purchaser
