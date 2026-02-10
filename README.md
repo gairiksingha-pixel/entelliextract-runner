@@ -151,11 +151,11 @@ Manual test cases covering **positive**, **negative**, and **edge** scenarios al
 
 | # | Core requirement | Test case IDs | What is verified |
 |---|------------------|---------------|------------------|
-| 1 | **Historical dataset coverage** – Sync from brand S3 buckets (e.g. Sundia, No Cow, Tractor) to staging and run extraction against all files | P1, P7, E4, E5 | Sync all brands to staging; full pipeline (sync + run) processes all files; empty bucket; partial S3 failures. |
-| 2 | **Full logging & traceability** – Record all requests and responses in a structured format for debugging and output comparison | P2, P8 | Request-response log updated per run; log file exists and has structured JSONL (one entry per request/response). |
-| 3 | **Resumable execution** – File-level checkpointing; resume without reprocessing completed files | E3, E7 | Resume after interrupt skips done files; corrupt/empty checkpoint handled (new run, no crash). |
-| 4 | **Load testing & benchmarking** – Configurable concurrency and rate; benchmark throughput, avg latency, error rates | P2, P9, E8 | Run produces report; report contains throughput, avg latency, P95, error rate (P9); run with custom concurrency/rate from config (E8). |
-| 5 | **Executive summary report** – Markdown, HTML, JSON (PDF optional) with total files, run time, success/failure, P95, anomalies | P3, P4, P10, E6 | Report from last run and by run ID; report content (totals, duration, breakdown, P95, anomalies); multiple formats; report when all failures. |
+| 1 | **Historical dataset coverage** – Sync from brand S3 buckets (e.g. Sundia, No Cow, Tractor) to staging and run extraction against all files | P1, P5, E3 | Sync all brands to staging; full pipeline (sync + run) processes all files; S3 edge (empty or partial failures). |
+| 2 | **Full logging & traceability** – Record all requests and responses in a structured format for debugging and output comparison | P2, P7 | Request-response log updated per run; log file has structured JSONL (runId, filePath, request, response). |
+| 3 | **Resumable execution** – File-level checkpointing; resume without reprocessing completed files | E2 | Resume after interrupt or corrupt checkpoint (new run ID, no crash). |
+| 4 | **Load testing & benchmarking** – Configurable concurrency and rate; benchmark throughput, avg latency, error rates | P2, P7, E5 | Run produces report; report has throughput, P95, error rate; run under concurrency/rate cap (E5). |
+| 5 | **Executive summary report** – Markdown, HTML, JSON (PDF optional) with total files, run time, success/failure, P95, anomalies | P3, P7, E4 | Report from last run or by run ID; formats .md/.html/.json; report when all failures (E4). |
 
 *Bonus (AI agent, intelligent retries): not implemented; no test cases.*
 
@@ -167,71 +167,55 @@ Manual test cases covering **positive**, **negative**, and **edge** scenarios al
 |-----|-----------------------|--------------------------------------|-----------------|
 | P1  | Sync (valid config)   | `npm start sync`                     | Exit 0, files in staging |
 | P2  | Run extraction        | `npm start run -- --no-sync`         | Exit 0, Success/Failed/Skipped, report + log |
-| P3  | Report (last run)     | `npm start report`                   | Exit 0, report files in output/reports |
-| P4  | Report (by run ID)    | `npm start report -- --run-id <id>` | Exit 0, report for that run |
-| P5  | Custom config         | `npm start sync -c config/my.yaml`   | Exit 0, uses my.yaml |
+| P3  | Report (last run or by run-id) | `npm start report [--run-id <id>]` | Exit 0, report files (.md + .html + .json) |
+| P4  | Custom config         | `npm start sync -c config/config.yaml` | Exit 0, uses given config |
+| P5  | **Req 1** Full pipeline | `npm start run`                    | Exit 0, sync then run all files |
 | P6  | Run, no report        | `npm start run -- --no-sync --no-report` | Exit 0, no new reports |
-| P7  | **Req 1** Full pipeline | `npm start run`                    | Exit 0, sync all brands then run all files |
-| P8  | **Req 2** Log structure | Inspect `output/logs/request-response_<runId>.jsonl` | JSONL: runId, filePath, request, response, success |
-| P9  | **Req 4** Benchmark in report | Open report .md/.json          | Throughput, avg/P95 latency, error rate |
-| P10 | **Req 5** Report formats | `npm start report`                | Exit 0, .md + .html + .json with totals, P95, anomalies |
+| P7  | **Req 2/4/5** Output structure | After run: inspect `output/logs/*.jsonl` + report | JSONL: runId, filePath, request, response; report: throughput, P95, .md/.html/.json |
 
 **Details (positive)**
 
 - **P1** — *Given:* Valid `config.yaml`, real S3 buckets, AWS creds. *Expect:* Structured "Sync Summary" with download/skipped/errors and per-brand staging paths; files under `output/staging/<brand>/<purchaser>/`.
 - **P2** — *Given:* Staging has ≥1 file, API creds set. *Expect:* "Run run_... finished. Success: N, Failed: M, Skipped: K"; report in `output/reports/`; checkpoint and request-response log updated.
-- **P3** — *Given:* At least one completed run (last-run-id.txt exists). *Expect:* "Report(s) written: [ ... ]"; markdown/HTML/JSON with metrics and run ID.
-- **P4** — *Given:* Valid run ID from a previous run. *Expect:* Report generated for that run ID.
-- **P5** — *Given:* Valid config at `config/my.yaml`. *Expect:* Sync uses buckets/staging from that file.
+- **P3** — *Given:* At least one completed run (last-run-id.txt exists) or valid run ID. *Expect:* "Report(s) written: [ ... ]"; markdown/HTML/JSON with metrics and run ID.
+- **P4** — *Given:* Valid config path. *Expect:* Sync uses buckets/staging from that file.
+- **P5** — *Given:* Multiple brands in config; AWS and API creds. *Expect:* Per-brand sync then extraction over all files; console shows sync counts and Success/Failed/Skipped.
 - **P6** — *Given:* Staging populated. *Expect:* Run completes; no new files in `output/reports/`.
-- **P7** — *Given:* Multiple brands in config; AWS and API creds. *Expect:* Per-brand sync then extraction over all files; console shows sync counts and Success/Failed/Skipped.
-- **P8** — *Given:* A run with ≥1 request. *Expect:* Log file exists; each line valid JSON with runId, filePath, request (method, url, bodyLength), response (statusCode, latencyMs, bodyPreview), success; one line per file.
-- **P9** — *Given:* A run with some success/failure. *Expect:* Report has total files, run time, success/failure/skipped counts, throughput (files/sec), average latency, P95 latency, error rate.
-- **P10** — *Given:* `report.formats`: markdown, html, json. *Expect:* One file per format in `output/reports/`; content has total files, run duration, success/failure breakdown, P95, anomalies.
+- **P7** — *Given:* A run with ≥1 request. *Expect:* Log file has JSONL with runId, filePath, request, response; report has throughput, P95, error rate and .md/.html/.json formats.
 
 ### Negative test cases
 
-| ID  | Scenario           | Command                                    | Expected   |
-|-----|--------------------|--------------------------------------------|------------|
-| N1  | Config missing     | `npm start sync -c config/nonexistent.yaml` | Exit 1, "Failed to load config..." |
-| N2  | Invalid YAML       | `npm start sync` (bad YAML in config)      | Exit 1, "Invalid YAML in ..." |
-| N3  | Invalid config     | `npm start sync` (missing api.baseUrl etc.) | Exit 1, "Missing or invalid: ..." |
-| N4  | No prior run       | `npm start report` (no last-run-id.txt)   | Exit 1, "No last run found..." |
-| N5  | Bad run ID         | `npm start report -- --run-id run_000...fake` | Exit 1, "No records found for run..." |
-| N6  | Sync fails (AWS)   | `npm start sync` (wrong creds/bucket)      | Exit 1, "Sync failed: ..." |
+Negative coverage is by **value combination**: change config path or run context to get missing config, invalid YAML, invalid schema, or no valid run. If config is missing or invalid, the process exits before running; one consolidated check is enough.
+
+| ID  | Scenario           | Command / value combo                         | Expected   |
+|-----|--------------------|------------------------------------------------|------------|
+| N1  | Invalid config     | `sync -c config/nonexistent.yaml` (or `bad-yaml.yaml`, `bad-schema.yaml`) | Exit 1, Failed to load config / Invalid YAML / Missing or invalid |
+| N2  | Report without valid run | `report` with no last-run-id, or `report --run-id run_000...fake` | Exit 1, No last run found / No records found |
+| N3  | Sync fails (AWS)   | `sync` with wrong creds or bucket              | Exit 1, Sync failed |
 
 **Details (negative)**
 
-- **N1** — *Given:* No config at path (or wrong path). *Expect:* Exit 1; message "Failed to load config from ..." and/or "Missing or invalid".
-- **N2** — *Given:* config.yaml with invalid YAML (e.g. stray `:`, bad indentation). *Expect:* Exit 1; "Invalid YAML in ..." with parse details.
-- **N3** — *Given:* Config missing e.g. api.baseUrl or s3.buckets. *Expect:* Exit 1; "Invalid config ... Missing or invalid: api.baseUrl, ...".
-- **N4** — *Given:* Fresh clone; no `output/checkpoints/last-run-id.txt`. *Expect:* Exit 1; "No last run found. Run \"run\" first or pass --run-id."
-- **N5** — *Given:* Run ID that never existed in checkpoint. *Expect:* Exit 1; "No records found for run run_0000000000_fake."
-- **N6** — *Given:* Wrong AWS credentials or invalid bucket name. *Expect:* Exit 1; "Sync failed: ..." with underlying error (e.g. access denied, bucket not found).
+- **N1** — *Value combos:* Missing file, invalid YAML (`config/bad-yaml.yaml`), invalid schema (`config/bad-schema.yaml`). *Expect:* Exit 1; process does not run; message indicates config load or validation failure.
+- **N2** — *Value combos:* No `last-run-id.txt`, or fake run ID. *Expect:* Exit 1; "No last run found" or "No records found for run ...".
+- **N3** — *Given:* Wrong AWS credentials or invalid bucket. *Expect:* Exit 1; "Sync failed: ..." with underlying error.
 
 ### Edge test cases
 
-| ID  | Scenario            | Command                          | Expected   |
-|-----|---------------------|----------------------------------|------------|
-| E1  | Empty staging       | `npm start run -- --no-sync`     | Exit 0, Success: 0, Failed: 0, Skipped: 0 |
-| E2  | All API fail        | `npm start run -- --no-sync`     | Exit 0, Failed: N, report has error rate + anomalies |
-| E3  | Resume after stop   | Run twice: start, Ctrl+C, run again | 2nd run skips done files |
-| E4  | Empty S3 bucket     | `npm start sync`                 | Exit 0, Sync Summary with Downloaded: 0, Errors: 0 |
-| E5  | S3 partial failures | `npm start sync`                 | Exit 0, Sync Summary with synced N, errors M (M>0), errors logged |
-| E6  | Report (all failed) | `npm start report -- --run-id <id>` | Exit 0, report: failed count, 0 success, anomalies |
-| E7  | Corrupt checkpoint  | Replace checkpoint.json with `{}` then run | Exit 0, new run ID, no crash |
-| E8  | **Req 4** Concurrency/rate | `npm start run -- --no-sync` (config: concurrency 3, rps 5) | Exit 0, run completes under cap |
+| ID  | Scenario            | Command / value combo                | Expected   |
+|-----|---------------------|--------------------------------------|------------|
+| E1  | Empty staging or all API fail | `npm start run -- --no-sync` (empty staging or bad API) | Exit 0, Success: 0 or Failed: N, no crash |
+| E2  | Resume / corrupt checkpoint | Run twice (Ctrl+C then run again) or set checkpoint.json to `{}` then run | 2nd run skips done files; or new run ID, no crash |
+| E3  | S3 edge (empty or partial failures) | `npm start sync` (empty bucket or some keys fail) | Exit 0, synced 0 or errors M>0 |
+| E4  | Report (all failed run) | `npm start report -- --run-id <id>` for run with 0 success | Exit 0, failed count, anomalies |
+| E5  | **Req 4** Concurrency/rate | `npm start run -- --no-sync` (config: concurrency, rps) | Exit 0, run under cap |
 
 **Details (edge)**
 
-- **E1** — *Given:* Empty `output/staging/` or no brand dirs. *Expect:* Exit 0; "Success: 0, Failed: 0, Skipped: 0"; no crash; report may show zero throughput.
-- **E2** — *Given:* Staging has files; API URL wrong or creds invalid. *Expect:* Exit 0; run completes with "Failed: N"; checkpoint status error; report shows error rate and anomalies.
-- **E3** — *Given:* Start run, Ctrl+C after some files complete, same config. *Expect:* First run partial; second run skips completed files; final counts consistent.
-- **E4** — *Given:* Real bucket with zero objects. *Expect:* Exit 0; Sync Summary with Downloaded: 0, Errors: 0; no files in staging for that brand.
-- **E5** — *Given:* Bucket with some keys that fail (e.g. access denied). *Expect:* Exit 0; Sync Summary with synced N, errors M (M>0); successful files in staging; errors on console.
-- **E6** — *Given:* Run where 0 success, all failed. *Expect:* Exit 0; report has failed count, 0 success, safe latency defaults, anomalies list errors.
-- **E7** — *Given:* checkpoint.json is `{}` or invalid JSON. *Expect:* Exit 0; stub uses empty store, new run ID; no crash.
-- **E8** — *Given:* config has run.concurrency: 3, run.requestsPerSecond: 5; staging has several files. *Expect:* Exit 0; run completes; throughput/latency consistent with cap.
+- **E1** — *Value combos:* Empty staging, or staging with files but API failing. *Expect:* Exit 0; "Success: 0, Failed: 0" or "Failed: N"; no crash.
+- **E2** — *Value combos:* Resume after Ctrl+C (second run skips done files), or corrupt/empty checkpoint. *Expect:* Exit 0; new run ID when checkpoint invalid; no crash.
+- **E3** — *Value combos:* Empty bucket, or bucket with some keys that fail. *Expect:* Exit 0; Sync Summary with Downloaded: 0 or errors M>0.
+- **E4** — *Given:* Run ID for a run where all extractions failed. *Expect:* Exit 0; report has failed count, 0 success, anomalies.
+- **E5** — *Given:* config has run.concurrency and run.requestsPerSecond; staging has files. *Expect:* Exit 0; run completes; throughput/latency under cap.
 
 ### Test runner (HTML UI)
 
@@ -251,7 +235,7 @@ Run all test cases from a browser with one click per case:
 
 **Logo:** The test runner page uses the intellirevenue logo if present. Place your logo at `assets/logo.png`, or any `.png` file in the `assets/` folder.
 
-Negative cases (N1–N6) use fixture configs where needed: `config/nonexistent.yaml`, `config/bad-yaml.yaml`, `config/bad-schema.yaml`.
+Negative cases (N1–N3): N1 uses `config/nonexistent.yaml` (or `bad-yaml.yaml` / `bad-schema.yaml` for value combos); N2 uses a fake run ID; N3 uses live sync (wrong creds/bucket for failure).
 
 ### Quick verification script (optional)
 

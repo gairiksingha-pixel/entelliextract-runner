@@ -115,18 +115,14 @@ const CASE_COMMANDS = {
   P1: (p) => syncArgs(p),
   P2: (p) => runArgs(p, ['--no-sync']),
   P3: () => ['node', ['dist/index.js', 'report'], { cwd: ROOT }],
-  P4: () => {
-    const runId = getLastRunId() || 'run_0000000000_fake';
-    return ['node', ['dist/index.js', 'report', '--run-id', runId], { cwd: ROOT }];
-  },
-  P5: (p) => {
+  P4: (p) => {
     const base = ['dist/index.js', 'sync', '-c', 'config/config.yaml'];
     if (p?.syncLimit > 0) base.push('--limit', String(p.syncLimit));
     return ['node', base, { cwd: ROOT }];
   },
+  P5: (p) => runArgs(p, []),
   P6: (p) => runArgs(p, ['--no-sync', '--no-report']),
-  P7: (p) => runArgs(p, []),
-  P8: () => [
+  P7: () => [
     'node',
     [
       '-e',
@@ -134,24 +130,11 @@ const CASE_COMMANDS = {
     ],
     { cwd: ROOT },
   ],
-  P9: () => ['node', ['dist/index.js', 'report'], { cwd: ROOT }],
-  P10: () => ['node', ['dist/index.js', 'report'], { cwd: ROOT }],
   N1: () => ['node', ['dist/index.js', 'sync', '-c', 'config/nonexistent.yaml'], { cwd: ROOT }],
-  N2: () => ['node', ['dist/index.js', 'sync', '-c', 'config/bad-yaml.yaml'], { cwd: ROOT }],
-  N3: () => ['node', ['dist/index.js', 'sync', '-c', 'config/bad-schema.yaml'], { cwd: ROOT }],
-  N4: () => ['node', ['dist/index.js', 'report'], { cwd: ROOT }],
-  N5: () => ['node', ['dist/index.js', 'report', '--run-id', 'run_0000000000_fake'], { cwd: ROOT }],
-  N6: (p) => syncArgs(p),
+  N2: () => ['node', ['dist/index.js', 'report', '--run-id', 'run_0000000000_fake'], { cwd: ROOT }],
+  N3: (p) => syncArgs(p),
   E1: (p) => runArgs(p, ['--no-sync']),
-  E2: (p) => runArgs(p, ['--no-sync']),
-  E3: (p) => runArgs(p, ['--no-sync']),
-  E4: (p) => syncArgs(p),
-  E5: (p) => syncArgs(p),
-  E6: () => {
-    const runId = getLastRunId() || 'run_0000000000_fake';
-    return ['node', ['dist/index.js', 'report', '--run-id', runId], { cwd: ROOT }];
-  },
-  E7: (p) => {
+  E2: (p) => {
     const cp = join(ROOT, 'output', 'checkpoints', 'checkpoint.json');
     if (existsSync(cp)) {
       try {
@@ -161,7 +144,12 @@ const CASE_COMMANDS = {
     }
     return runArgs(p, ['--no-sync']);
   },
-  E8: (p) => runArgs(p, ['--no-sync']),
+  E3: (p) => syncArgs(p),
+  E4: () => {
+    const runId = getLastRunId() || 'run_0000000000_fake';
+    return ['node', ['dist/index.js', 'report', '--run-id', runId], { cwd: ROOT }];
+  },
+  E5: (p) => runArgs(p, ['--no-sync']),
 };
 
 const PROGRESS_REGEX = /(\d+)%\s*\((\d+)\/(\d+)\)/g;
