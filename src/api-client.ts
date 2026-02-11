@@ -2,25 +2,15 @@
  * intelliExtract API client.
  * Uses POST /api/v1/spreadsheet/extract/upload (multipart/form-data file upload).
  * Auth headers (must match Swagger): X-Access-Key, X-Secret-Message, X-Signature.
- * Set ENTELLIEXTRACT_USE_MOCK=1 to return fixture JSON instead of calling the API (for offline/dev).
  * Uses undici with a custom connect timeout (config.api.timeoutMs); Node's default fetch has a 10s connect limit.
  */
 
 import { config as loadEnv } from 'dotenv';
-import { readFileSync, existsSync } from 'node:fs';
-import { basename, join } from 'node:path';
+import { basename } from 'node:path';
 import { fetch, Agent, FormData } from 'undici';
 import type { Config } from './types.js';
 
 loadEnv();
-
-const USE_MOCK = process.env.ENTELLIEXTRACT_USE_MOCK === '1' || process.env.ENTELLIEXTRACT_USE_MOCK === 'true';
-
-function loadMockResponse(): string | null {
-  const path = join(process.cwd(), 'fixtures', 'extract-response-success.json');
-  if (!existsSync(path)) return null;
-  return readFileSync(path, 'utf-8');
-}
 
 export interface ExtractRequest {
   filePath: string;
@@ -71,21 +61,6 @@ export async function extract(
   abortSignal?: AbortSignal
 ): Promise<ExtractResult> {
   const start = Date.now();
-
-  if (USE_MOCK) {
-    const body = loadMockResponse();
-    if (body) {
-      await new Promise((r) => setTimeout(r, 100));
-      return {
-        success: true,
-        statusCode: 200,
-        latencyMs: Date.now() - start,
-        body,
-        headers: { 'content-type': 'application/json' },
-      };
-    }
-  }
-
   const url = getExtractUploadUrl(config);
 
   if (!request.fileContentBase64) {

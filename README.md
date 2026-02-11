@@ -18,16 +18,24 @@ TypeScript test automation for the EntelliExtract spreadsheet extraction API. Su
 
 2. **Configuration**
 
+   - **Create** `config/config.yaml` from the example (the repo does not commit `config.yaml` so you keep your own copy):
+     ```bash
+     cp config/config.example.yaml config/config.yaml
+     ```
    - Edit `config/config.yaml` (staging dir, concurrency, report options). S3 buckets are built from `.env` when `S3_BUCKET` and `S3_TENANT_PURCHASERS` are set.
 
 3. **Environment (credentials)**
 
-   - Create `.env` with EntelliExtract API credentials:
+   - Create `.env` from the example (the repo does not commit `.env`):
+     ```bash
+     cp .env.example .env
+     ```
+   - Edit `.env` with your EntelliExtract API credentials:
      - `ENTELLIEXTRACT_BASE_URL` – API base URL
      - `ENTELLIEXTRACT_ACCESS_KEY`
      - `ENTELLIEXTRACT_SECRET_MESSAGE`
      - `ENTELLIEXTRACT_SIGNATURE`
-   - For S3 sync, set AWS credentials and `S3_BUCKET`, `S3_TENANT_PURCHASERS` (JSON map of tenant folder → purchaser folders). See `.env` for the bucket and tenant/purchaser layout.
+   - For S3 sync, set AWS credentials and `S3_BUCKET`, `S3_TENANT_PURCHASERS` (JSON map of tenant folder → purchaser folders). See `.env.example` for the full list.
 
 4. **Build**
 
@@ -37,7 +45,7 @@ TypeScript test automation for the EntelliExtract spreadsheet extraction API. Su
 
 ## Commands
 
-All commands use the config file at `config/config.yaml` unless you pass `-c path/to/config.yaml`.
+All commands use the config file at `config/config.yaml` unless you pass `-c path/to/config.yaml`. If you just cloned the repo, create it with `cp config/config.example.yaml config/config.yaml` (see Setup).
 
 - **Sync only** – copy files from the S3 bucket (tenant/purchaser folders) to staging. Optionally scope to one tenant and purchaser:
 
@@ -54,8 +62,6 @@ All commands use the config file at `config/config.yaml` unless you pass `-c pat
   npm start run -- --tenant <tenant> --purchaser <purchaser>
   npm start run -- --no-report  # run but do not write report
   ```
-
-  **Mock mode (offline / no API):** Set `ENTELLIEXTRACT_USE_MOCK=1` to return the fixture response from `fixtures/extract-response-success.json` instead of calling the API. Use for development or when the API is unreachable.
 
 - **Report** – generate the executive summary from the last run (or a given run ID):
 
@@ -189,13 +195,13 @@ Negative coverage is by **value combination**: change config path or run context
 
 | ID  | Scenario           | Command / value combo                         | Expected   |
 |-----|--------------------|------------------------------------------------|------------|
-| N1  | Invalid config     | `sync -c config/nonexistent.yaml` (or `bad-yaml.yaml`, `bad-schema.yaml`) | Exit 1, Failed to load config / Invalid YAML / Missing or invalid |
+| N1  | Invalid config     | `sync -c config/nonexistent.yaml` (missing file) | Exit 1, Failed to load config |
 | N2  | Report without valid run | `report` with no last-run-id, or `report --run-id run_000...fake` | Exit 1, No last run found / No records found |
 | N3  | Sync fails (AWS)   | `sync` with wrong creds or bucket              | Exit 1, Sync failed |
 
 **Details (negative)**
 
-- **N1** — *Value combos:* Missing file, invalid YAML (`config/bad-yaml.yaml`), invalid schema (`config/bad-schema.yaml`). *Expect:* Exit 1; process does not run; message indicates config load or validation failure.
+- **N1** — *Given:* Missing config file (e.g. `config/nonexistent.yaml`). *Expect:* Exit 1; process does not run; message indicates config load failure.
 - **N2** — *Value combos:* No `last-run-id.txt`, or fake run ID. *Expect:* Exit 1; "No last run found" or "No records found for run ...".
 - **N3** — *Given:* Wrong AWS credentials or invalid bucket. *Expect:* Exit 1; "Sync failed: ..." with underlying error.
 
@@ -235,7 +241,7 @@ Run all test cases from a browser with one click per case:
 
 **Logo:** The test runner page uses the intellirevenue logo if present. Place your logo at `assets/logo.png`, or any `.png` file in the `assets/` folder.
 
-Negative cases (N1–N3): N1 uses `config/nonexistent.yaml` (or `bad-yaml.yaml` / `bad-schema.yaml` for value combos); N2 uses a fake run ID; N3 uses live sync (wrong creds/bucket for failure).
+Negative cases (N1–N3): N1 uses a missing config path (`config/nonexistent.yaml`); N2 uses a fake run ID; N3 uses live sync (wrong creds/bucket for failure).
 
 ### Quick verification script (optional)
 

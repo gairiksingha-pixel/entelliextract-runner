@@ -149,7 +149,12 @@ export function buildSummary(metrics: RunMetrics): ExecutiveSummary {
 
 function sectionForRun(entry: HistoricalRunSummary, isFirst: boolean): string {
   const m = entry.metrics;
-  const runDuration = formatDuration(m.totalProcessingTimeMs);
+  const wallClockMs = entry.runDurationSeconds * 1000;
+  const runDuration = formatDuration(wallClockMs);
+  const processed = m.success + m.failed;
+  const throughputPerSecond = entry.runDurationSeconds > 0 ? processed / entry.runDurationSeconds : 0;
+  const throughputPerMinute = throughputPerSecond * 60;
+  const totalApiTime = formatDuration(m.totalProcessingTimeMs);
   const anomalyItems = m.anomalies.map((a) => {
     const pathSuffix = a.filePath ? ' (' + escapeHtml(a.filePath) + ')' : '';
     return '<li><strong>' + escapeHtml(a.type) + '</strong>: ' + escapeHtml(a.message) + pathSuffix + '</li>';
@@ -237,8 +242,9 @@ function sectionForRun(entry: HistoricalRunSummary, isFirst: boolean): string {
     <tr><td>Success</td><td>${m.success}</td></tr>
     <tr><td>Failed</td><td>${m.failed}</td></tr>
     <tr><td>Skipped</td><td>${m.skipped}</td></tr>
-    <tr><td>Run duration (total processing time)</td><td>${runDuration}</td></tr>
-    <tr><td>Throughput</td><td>${m.throughputPerSecond.toFixed(2)} files/sec, ${m.throughputPerMinute.toFixed(2)} files/min</td></tr>
+    <tr><td>Run duration (wall clock)</td><td>${runDuration}</td></tr>
+    <tr><td>Throughput</td><td>${throughputPerSecond.toFixed(2)} files/sec, ${throughputPerMinute.toFixed(2)} files/min</td></tr>
+    <tr><td>Total API time (sum of request latencies)</td><td>${totalApiTime}</td></tr>
     <tr><td>Error rate</td><td>${(m.errorRate * 100).toFixed(2)}%</td></tr>
   </table>
   <h3>Latency (ms)</h3>
