@@ -144,6 +144,17 @@ export function getRecordsForRun(db: CheckpointDb, runId: string): CheckpointRec
   return rows.map(rowToRecord);
 }
 
+/** All unique run IDs from checkpoints, ordered by latest first (by earliest started_at in that run). */
+export function getAllRunIdsOrdered(db: CheckpointDb): string[] {
+  const byRun = new Map<string, number>();
+  for (const c of db._data.checkpoints) {
+    const t = c.started_at ? new Date(c.started_at).getTime() : 0;
+    const cur = byRun.get(c.run_id);
+    if (cur === undefined || t < cur) byRun.set(c.run_id, t);
+  }
+  return [...byRun.entries()].sort((a, b) => b[1] - a[1]).map(([runId]) => runId);
+}
+
 export function closeCheckpointDb(db: CheckpointDb): void {
   saveStore(db);
 }

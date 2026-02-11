@@ -6,11 +6,19 @@
 import { mkdirSync, existsSync, writeFileSync, readFileSync, readdirSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import type { Config, RunMetrics, ExecutiveSummary } from './types.js';
-import { openCheckpointDb, getRecordsForRun, closeCheckpointDb } from './checkpoint.js';
+import { openCheckpointDb, getRecordsForRun, getAllRunIdsOrdered, closeCheckpointDb } from './checkpoint.js';
+import { computeMetrics } from './metrics.js';
 
 export interface ExtractionResultEntry {
   filename: string;
   response: unknown;
+}
+
+export interface HistoricalRunSummary {
+  runId: string;
+  metrics: RunMetrics;
+  extractionResults: ExtractionResultEntry[];
+  runDurationSeconds: number;
 }
 
 /** Same naming as load-engine so we only show results for files that succeeded in this run. */
@@ -57,6 +65,43 @@ function filterExtractionResultsForRun(
   return allResults.filter((e) => doneFilenames.has(e.filename));
 }
 
+function minMaxDatesFromRecords(records: { startedAt?: string; finishedAt?: string }[]): { start: Date; end: Date } {
+  let startedAt = Number.NaN;
+  let finishedAt = Number.NaN;
+  for (const r of records) {
+    if (r.startedAt) {
+      const t = new Date(r.startedAt).getTime();
+      startedAt = Number.isNaN(startedAt) ? t : Math.min(startedAt, t);
+    }
+    if (r.finishedAt) {
+      const t = new Date(r.finishedAt).getTime();
+      finishedAt = Number.isNaN(finishedAt) ? t : Math.max(finishedAt, t);
+    }
+  }
+  const start = Number.isNaN(startedAt) ? new Date(0) : new Date(startedAt);
+  const end = Number.isNaN(finishedAt) ? new Date(startedAt || Date.now()) : new Date(finishedAt);
+  return { start, end };
+}
+
+/** Load all runs from checkpoint (latest first) with metrics and extraction results for full historical report. */
+export function loadHistoricalRunSummaries(config: Config): HistoricalRunSummary[] {
+  const db = openCheckpointDb(config.run.checkpointPath);
+  const runIds = getAllRunIdsOrdered(db);
+  const out: HistoricalRunSummary[] = [];
+  for (const runId of runIds) {
+    const records = getRecordsForRun(db, runId);
+    if (records.length === 0) continue;
+    const { start, end } = minMaxDatesFromRecords(records);
+    const metrics = computeMetrics(runId, records, start, end);
+    const allResults = loadExtractionResults(config, runId);
+    const extractionResults = filterExtractionResultsForRun(config, runId, allResults);
+    const runDurationSeconds = (end.getTime() - start.getTime()) / 1000;
+    out.push({ runId, metrics, extractionResults, runDurationSeconds });
+  }
+  closeCheckpointDb(db);
+  return out;
+}
+
 function formatDuration(ms: number): string {
   const sec = Math.floor(ms / 1000);
   const min = Math.floor(sec / 60);
@@ -78,46 +123,34 @@ export function buildSummary(metrics: RunMetrics): ExecutiveSummary {
   };
 }
 
-function htmlReport(summary: ExecutiveSummary, extractionResults: ExtractionResultEntry[] = []): string {
-  const m = summary.metrics;
-  const duration = formatDuration(summary.runDurationSeconds * 1000);
+function sectionForRun(entry: HistoricalRunSummary, isFirst: boolean): string {
+  const m = entry.metrics;
+  const duration = formatDuration(entry.runDurationSeconds * 1000);
   const anomalyItems = m.anomalies.map((a) => {
     const pathSuffix = a.filePath ? ' (' + escapeHtml(a.filePath) + ')' : '';
     return '<li><strong>' + escapeHtml(a.type) + '</strong>: ' + escapeHtml(a.message) + pathSuffix + '</li>';
   });
   const anomaliesList = m.anomalies.length > 0 ? '<ul>' + anomalyItems.join('') + '</ul>' : '<p>None detected.</p>';
   const extractionSection =
-    extractionResults.length > 0
+    entry.extractionResults.length > 0
       ? `
-  <h2>Extraction results (API response per file)</h2>
-  ${extractionResults
+  <h3>Extraction results (API response per file)</h3>
+  <p class="accordion-hint">Click a filename to expand or collapse the JSON.</p>
+  <div class="extraction-accordion">
+  ${entry.extractionResults
     .map(
       ({ filename, response }) =>
-        `<details open><summary><strong>${escapeHtml(filename)}</strong></summary><pre class="extraction-json">${escapeHtml(JSON.stringify(response, null, 2))}</pre></details>`
+        `<details class="extraction-details"><summary class="extraction-summary"><strong>${escapeHtml(filename)}</strong></summary><pre class="extraction-json">${escapeHtml(JSON.stringify(response, null, 2))}</pre></details>`
     )
-    .join('\n  ')}`
+    .join('\n  ')}
+  </div>`
       : '';
-  return `<!DOCTYPE html>
-<html lang="en">
-<head>
-  <meta charset="UTF-8">
-  <title>${escapeHtml(summary.title)}</title>
-  <style>
-    body { font-family: system-ui, sans-serif; max-width: 900px; margin: 2rem auto; padding: 0 1rem; }
-    table { border-collapse: collapse; width: 100%; }
-    th, td { border: 1px solid #ddd; padding: 8px 12px; text-align: left; }
-    th { background: #f5f5f5; }
-    h1 { color: #333; }
-    .meta { color: #666; font-size: 0.9rem; margin-bottom: 1.5rem; }
-    .extraction-json { background: #f8f8f8; padding: 1rem; overflow: auto; font-size: 0.85rem; border: 1px solid #ddd; }
-    details { margin-bottom: 1rem; }
-    details summary { cursor: pointer; }
-  </style>
-</head>
-<body>
-  <h1>${escapeHtml(summary.title)}</h1>
-  <p class="meta">Generated: ${escapeHtml(summary.generatedAt)}</p>
-  <h2>Overview</h2>
+  const openAttr = isFirst ? ' open' : '';
+  return `
+  <details class="run-section"${openAttr}>
+  <summary class="run-section-summary"><strong>${escapeHtml(m.runId)}</strong> — ${m.success} success, ${m.failed} failed, ${m.skipped} skipped</summary>
+  <div class="run-section-body">
+  <h3>Overview</h3>
   <table>
     <tr><th>Metric</th><th>Value</th></tr>
     <tr><td>Total files</td><td>${m.totalFiles}</td></tr>
@@ -128,7 +161,7 @@ function htmlReport(summary: ExecutiveSummary, extractionResults: ExtractionResu
     <tr><td>Throughput</td><td>${m.throughputPerSecond.toFixed(2)} files/sec</td></tr>
     <tr><td>Error rate</td><td>${(m.errorRate * 100).toFixed(2)}%</td></tr>
   </table>
-  <h2>Latency (ms)</h2>
+  <h3>Latency (ms)</h3>
   <table>
     <tr><th>Percentile</th><th>Value</th></tr>
     <tr><td>Average</td><td>${m.avgLatencyMs.toFixed(2)}</td></tr>
@@ -136,12 +169,69 @@ function htmlReport(summary: ExecutiveSummary, extractionResults: ExtractionResu
     <tr><td>P95</td><td>${m.p95LatencyMs.toFixed(2)}</td></tr>
     <tr><td>P99</td><td>${m.p99LatencyMs.toFixed(2)}</td></tr>
   </table>
-  <h2>Anomalies</h2>
+  <h3>Anomalies</h3>
   ${anomaliesList}
   ${extractionSection}
-  <p><small>Run ID: ${escapeHtml(m.runId)}</small></p>
+  </div>
+  </details>`;
+}
+
+const REPORT_TITLE = 'EntelliExtract Test Run – Executive Summary';
+
+function htmlReportFromHistory(historicalSummaries: HistoricalRunSummary[], generatedAt: string): string {
+  const runsHtml = historicalSummaries
+    .map((entry, i) => sectionForRun(entry, i === 0))
+    .join('');
+  return `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>${escapeHtml(REPORT_TITLE)}</title>
+  <style>
+    body { font-family: system-ui, sans-serif; max-width: 900px; margin: 2rem auto; padding: 0 1rem; }
+    table { border-collapse: collapse; width: 100%; }
+    th, td { border: 1px solid #ddd; padding: 8px 12px; text-align: left; }
+    th { background: #f5f5f5; }
+    h1, h2 { color: #333; }
+    h3 { color: #444; font-size: 1rem; margin-top: 1rem; }
+    .meta { color: #666; font-size: 0.9rem; margin-bottom: 1.5rem; }
+    .run-section { margin-bottom: 1rem; border: 1px solid #ddd; border-radius: 6px; overflow: hidden; }
+    .run-section[open] { border-color: #216c6d; }
+    .run-section-summary { cursor: pointer; padding: 0.6rem 0.75rem; background: #f5f5f5; list-style: none; font-size: 1rem; }
+    .run-section-summary::-webkit-details-marker { display: none; }
+    .run-section-summary::before { content: "▶"; display: inline-block; margin-right: 0.5rem; font-size: 0.65rem; color: #666; transition: transform 0.2s; }
+    .run-section[open] .run-section-summary::before { transform: rotate(90deg); }
+    .run-section-summary:hover { background: #eee; }
+    .run-section-body { padding: 0 0.75rem 0.75rem; }
+    .extraction-accordion { margin-top: 0.5rem; }
+    .accordion-hint { color: #666; font-size: 0.85rem; margin-bottom: 0.5rem; }
+    details.extraction-details { margin-bottom: 0.5rem; border: 1px solid #ddd; border-radius: 6px; overflow: hidden; }
+    details.extraction-details[open] { border-color: #216c6d; }
+    summary.extraction-summary { cursor: pointer; padding: 0.6rem 0.75rem; background: #f9f9f9; list-style: none; display: flex; align-items: center; }
+    summary.extraction-summary::-webkit-details-marker { display: none; }
+    summary.extraction-summary::before { content: "▶"; display: inline-block; margin-right: 0.5rem; font-size: 0.65rem; color: #666; transition: transform 0.2s; }
+    details.extraction-details[open] summary.extraction-summary::before { transform: rotate(90deg); }
+    details.extraction-details summary.extraction-summary:hover { background: #eee; }
+    .extraction-json { margin: 0; background: #f8f8f8; padding: 1rem; overflow: auto; font-size: 0.85rem; border-top: 1px solid #ddd; max-height: 400px; }
+  </style>
+</head>
+<body>
+  <h1>${escapeHtml(REPORT_TITLE)}</h1>
+  <p class="meta">Generated: ${escapeHtml(generatedAt)} — ${historicalSummaries.length} run(s) (sync &amp; extract)</p>
+  <h2>Historical runs</h2>
+  ${runsHtml}
 </body>
 </html>`;
+}
+
+function htmlReport(summary: ExecutiveSummary, extractionResults: ExtractionResultEntry[] = []): string {
+  const single: HistoricalRunSummary = {
+    runId: summary.metrics.runId,
+    metrics: summary.metrics,
+    extractionResults,
+    runDurationSeconds: summary.runDurationSeconds,
+  };
+  return htmlReportFromHistory([single], summary.generatedAt);
 }
 
 function escapeHtml(s: string): string {
@@ -154,27 +244,34 @@ function escapeHtml(s: string): string {
 
 /**
  * Write reports to config.report.outputDir in requested formats.
- * Loads extraction result JSON from output/extractions/<runId>/ and includes it in all report formats.
+ * Includes all historical sync & extract runs (from checkpoint) so downloaded reports have full history.
  */
 export function writeReports(config: Config, summary: ExecutiveSummary): void {
   const outDir = config.report.outputDir;
   if (!existsSync(outDir)) mkdirSync(outDir, { recursive: true });
 
   const runId = summary.metrics.runId;
-  const allResults = loadExtractionResults(config, runId);
-  const extractionResults = filterExtractionResultsForRun(config, runId, allResults);
+  const historicalSummaries = loadHistoricalRunSummaries(config);
+  const generatedAt = new Date().toISOString();
 
-  if (summary.metrics.runId) {
+  if (runId) {
     const base = `report_${runId}_${Date.now()}`;
     if (config.report.formats.includes('html')) {
       const path = join(outDir, `${base}.html`);
-      writeFileSync(path, htmlReport(summary, extractionResults), 'utf-8');
+      writeFileSync(path, htmlReportFromHistory(historicalSummaries, generatedAt), 'utf-8');
     }
     if (config.report.formats.includes('json')) {
       const path = join(outDir, `${base}.json`);
-      const jsonPayload = extractionResults.length > 0
-        ? { ...summary, extractionResults: extractionResults.map((e) => ({ filename: e.filename, response: e.response })) }
-        : summary;
+      const jsonPayload = {
+        title: REPORT_TITLE,
+        generatedAt,
+        runs: historicalSummaries.map((r) => ({
+          runId: r.runId,
+          metrics: r.metrics,
+          runDurationSeconds: r.runDurationSeconds,
+          extractionResults: r.extractionResults.map((e) => ({ filename: e.filename, response: e.response })),
+        })),
+      };
       writeFileSync(path, JSON.stringify(jsonPayload, null, 2), 'utf-8');
     }
   }

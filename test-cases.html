@@ -323,7 +323,7 @@
         font-family: inherit;
         box-shadow: var(--shadow-btn);
       }
-      button.run:hover {
+      button.run:hover:not(:disabled) {
         background: var(--primary-hover);
         box-shadow: 0 2px 6px rgba(0,0,0,0.18);
       }
@@ -370,23 +370,27 @@
         font-family: inherit;
         box-sizing: border-box;
         box-shadow: var(--shadow-btn);
+        color: #fff;
       }
       button.download-sync-report-btn {
         background: #2f5496;
-        color: #fff;
       }
-      button.download-sync-report-btn:hover {
+      button.download-sync-report-btn:hover:not(:disabled) {
         background: #244a7a;
-        color: #fff;
         box-shadow: 0 2px 6px rgba(0,0,0,0.2);
       }
-      button.download-report-btn {
-        background: var(--accent);
-        color: #fff;
+      button.download-report-btn.download-report-html-btn {
+        background: #216c6d;
       }
-      button.download-report-btn:hover {
-        background: var(--primary-hover);
-        color: #fff;
+      button.download-report-btn.download-report-html-btn:hover:not(:disabled) {
+        background: #1a5758;
+        box-shadow: 0 2px 6px rgba(0,0,0,0.2);
+      }
+      button.download-report-btn.download-report-json-btn {
+        background: #c17a0a;
+      }
+      button.download-report-btn.download-report-json-btn:hover:not(:disabled) {
+        background: #9d6208;
         box-shadow: 0 2px 6px rgba(0,0,0,0.2);
       }
       button.download-sync-report-btn:disabled,
@@ -590,9 +594,9 @@
         <table>
           <thead>
             <tr>
-              <th class="op-name">Operation</th>
+              <th class="op-name">Operations</th>
               <th class="limits-col">Batch limits (Sync / Extract)</th>
-              <th class="run-cell">Execute</th>
+              <th class="run-cell">Actions</th>
               <th class="result-header">Status &amp; output</th>
             </tr>
           </thead>
@@ -616,7 +620,7 @@
       const ROWS = [
         { id: "P1", scenario: "S3 Sync — Download files to staging", limits: { sync: true, extract: false } },
         { id: "P2", scenario: "Extract & Report — Run extraction and generate report", limits: { sync: false, extract: true } },
-        { id: "PIPE", scenario: "Sync & Extract (pipeline) — One count: sync and extract each file in background as it's synced", limits: { pipeline: true } },
+        { id: "PIPE", scenario: "Sync & Extract (pipeline) — Sync and extract each file in background as it's synced", limits: { pipeline: true } },
       ];
 
       function renderLimitsCell(c) {
@@ -692,7 +696,7 @@
         tr.querySelector(".btn-row-download").appendChild(downloadSyncReportBtn);
         function addReportDownloadBtn(label, format) {
           const b = document.createElement("button");
-          b.className = "download-report-btn";
+          b.className = "download-report-btn download-report-" + format + "-btn";
           b.textContent = label;
           b.type = "button";
           b.setAttribute("data-format", format);
@@ -780,21 +784,21 @@
         var parsed = {};
         var lines = stdoutFiltered ? stdoutFiltered.split("\n") : [];
         for (var i = 0; i < lines.length; i++) {
-          var line = lines[i];
+          var line = (lines[i] || "").trim().replace(/\r$/, "");
           var m;
           if ((m = /^Download limit:\s*(.+)$/.exec(line))) parsed.downloadLimit = m[1].trim();
-          else if ((m = /^Downloaded \(new\):\s*(\d+)$/.exec(line))) parsed.downloadedNew = m[1];
-          else if ((m = /^Skipped \(already present[^:]*:\s*(\d+)$/.exec(line))) parsed.skipped = m[1];
-          else if ((m = /^Errors:\s*(\d+)$/.exec(line))) parsed.errors = m[1];
+          else if ((m = /^Downloaded \(new\):\s*(\d+)\s*$/.exec(line))) parsed.downloadedNew = m[1];
+          else if ((m = /^Skipped \(already present[^:]*:\s*(\d+)\s*$/.exec(line))) parsed.skipped = m[1];
+          else if ((m = /^Errors:\s*(\d+)\s*$/.exec(line))) parsed.errors = m[1];
           else if ((m = /^\s+Staging path:\s*(.+)$/.exec(line))) {
             if (!parsed.stagingPaths) parsed.stagingPaths = [];
             parsed.stagingPaths.push(m[1].trim());
-          }           else if ((m = /^Scoped to tenant:\s*([^,]+),\s*purchaser:\s*(.+)$/.exec(line))) {
+          } else if ((m = /^Scoped to tenant:\s*([^,]+),\s*purchaser:\s*(.+)$/.exec(line))) {
             parsed.brandAndPurchaser = (m[1].trim() + " / " + m[2].trim()).trim();
-          } else if ((m = /^\s{2}([^:\s][^:]*)\s*$/.exec(line)) && line.trim().indexOf("/") !== -1 && !/Staging path|Downloaded:|Skipped:|Errors:/.test(line)) {
+          } else if ((m = /^\s{2}([^:\s][^:]*)\s*$/.exec(line)) && line.indexOf("/") !== -1 && !/Staging path|Downloaded:|Skipped:|Errors:/.test(line)) {
             if (!parsed.brandAndPurchaserList) parsed.brandAndPurchaserList = [];
             parsed.brandAndPurchaserList.push(line.trim());
-          } else if ((m = /^Extraction metrics:\s*success=(\d+),\s*failed=(\d+),\s*skipped=(\d+)$/.exec(line))) {
+          } else if ((m = /^Extraction metrics:\s*success=(\d+),\s*failed=(\d+),\s*skipped=(\d+)\s*$/.exec(line))) {
             parsed.extractSuccess = m[1];
             parsed.extractFailed = m[2];
             parsed.extractSkipped = m[3];
@@ -805,36 +809,47 @@
         var extractCases = ["P2", "PIPE", "P5", "P3"];
         var hasSync = caseId && syncCases.indexOf(caseId) !== -1 && (parsed.downloadLimit != null || parsed.downloadedNew != null);
         var hasExtract = caseId && extractCases.indexOf(caseId) !== -1 && (parsed.extractSuccess != null || parsed.extractionResultsPath != null || parsed.reportsPath != null);
+        var allExtractZero = (parsed.extractSuccess === "0" || parsed.extractSuccess === 0) && (parsed.extractFailed === "0" || parsed.extractFailed === 0) && (parsed.extractSkipped === "0" || parsed.extractSkipped === 0);
+        var noSyncDownloaded = parsed.downloadedNew == null || parsed.downloadedNew === "0";
+        var hasExtractionMetrics = parsed.extractSuccess != null || parsed.extractFailed != null || parsed.extractSkipped != null;
+        var syncOnlyNoFiles = hasSync && noSyncDownloaded && !hasExtractionMetrics;
+        var extractOrPipelineNoFiles = hasExtractionMetrics && allExtractZero && (noSyncDownloaded || !hasSync);
+        var pipelineNoFiles = caseId === "PIPE" && pass && (allExtractZero || (hasSync && noSyncDownloaded));
+        var noFilesFound = pass && (syncOnlyNoFiles || extractOrPipelineNoFiles || pipelineNoFiles);
         var rows = [];
         rows.push(["Status", statusLabel]);
-        if (hasSync) {
-          if (parsed.downloadLimit != null) rows.push(["Download limit", parsed.downloadLimit]);
-          if (parsed.downloadedNew != null) rows.push(["Downloaded (new)", parsed.downloadedNew]);
-          var brandPurchaser = parsed.brandAndPurchaser || (parsed.brandAndPurchaserList && parsed.brandAndPurchaserList.length ? parsed.brandAndPurchaserList.join("\n") : null);
-          if (brandPurchaser) rows.push(["Brand and purchaser", brandPurchaser]);
-          if (parsed.stagingPaths && parsed.stagingPaths.length) rows.push(["Staging path", parsed.stagingPaths.join("\n")]);
-          var overview = [];
-          if (parsed.downloadedNew != null) overview.push("Downloaded: " + parsed.downloadedNew);
-          if (parsed.skipped != null) overview.push("Skipped: " + parsed.skipped);
-          if (parsed.errors != null) overview.push("Errors: " + parsed.errors);
-          if (overview.length) rows.push(["Overview", overview.join(", ")]);
-        }
-        if (hasExtract) {
-          if (parsed.brandAndPurchaser && !hasSync) rows.push(["Brand and purchaser", parsed.brandAndPurchaser]);
-          if (parsed.extractSuccess != null || parsed.extractFailed != null || parsed.extractSkipped != null) {
-            var detail = "Success: " + (parsed.extractSuccess || "0") + ", Failed: " + (parsed.extractFailed || "0") + ", Skipped: " + (parsed.extractSkipped || "0");
-            rows.push(["Total file extracted", detail]);
+        if (noFilesFound) {
+          rows.push(["Message", "No files found to sync or extract."]);
+        } else {
+          if (hasSync) {
+            if (parsed.downloadLimit != null) rows.push(["Download limit", parsed.downloadLimit]);
+            if (parsed.downloadedNew != null) rows.push(["Downloaded (new)", parsed.downloadedNew]);
+            var brandPurchaser = parsed.brandAndPurchaser || (parsed.brandAndPurchaserList && parsed.brandAndPurchaserList.length ? parsed.brandAndPurchaserList.join("\n") : null);
+            if (brandPurchaser) rows.push(["Brand and purchaser", brandPurchaser]);
+            if (parsed.stagingPaths && parsed.stagingPaths.length) rows.push(["Staging path", parsed.stagingPaths.join("\n")]);
+            var overview = [];
+            if (parsed.downloadedNew != null) overview.push("Downloaded: " + parsed.downloadedNew);
+            if (parsed.skipped != null) overview.push("Skipped: " + parsed.skipped);
+            if (parsed.errors != null) overview.push("Errors: " + parsed.errors);
+            if (overview.length) rows.push(["Overview", overview.join(", ")]);
           }
-          if (parsed.extractionResultsPath) rows.push(["Staging path", parsed.extractionResultsPath]);
-          if (parsed.reportsPath) rows.push(["Reports path", parsed.reportsPath]);
-        }
-        if (!hasSync && !hasExtract && stdoutFiltered) {
-          rows.push(["Output", escapeHtml(stdoutFiltered.slice(0, 1500)) + (stdoutFiltered.length > 1500 ? "…" : "")]);
-        } else if (rows.length === 1) {
-          var noOutput = !stdoutFiltered && !stderrFiltered;
-          rows.push(["Output", noOutput && data.exitCode === 0
-            ? "Command completed successfully with no console output."
-            : noOutput ? "Command produced no output. Check server logs or run in a terminal for details." : "—"]);
+          if (hasExtract) {
+            if (parsed.brandAndPurchaser && !hasSync) rows.push(["Brand and purchaser", parsed.brandAndPurchaser]);
+            if (parsed.extractSuccess != null || parsed.extractFailed != null || parsed.extractSkipped != null) {
+              var detail = "Success: " + (parsed.extractSuccess || "0") + ", Failed: " + (parsed.extractFailed || "0") + ", Skipped: " + (parsed.extractSkipped || "0");
+              rows.push(["Total file extracted", detail]);
+            }
+            if (parsed.extractionResultsPath) rows.push(["Staging path", parsed.extractionResultsPath]);
+            if (parsed.reportsPath) rows.push(["Reports path", parsed.reportsPath]);
+          }
+          if (!hasSync && !hasExtract && stdoutFiltered) {
+            rows.push(["Output", escapeHtml(stdoutFiltered.slice(0, 1500)) + (stdoutFiltered.length > 1500 ? "…" : "")]);
+          } else if (rows.length === 1) {
+            var noOutput = !stdoutFiltered && !stderrFiltered;
+            rows.push(["Output", noOutput && data.exitCode === 0
+              ? "Command completed successfully with no console output."
+              : noOutput ? "Command produced no output. Check server logs or run in a terminal for details." : "—"]);
+          }
         }
         if (stderrFiltered) rows.push(["Standard error", escapeHtml(stderrFiltered.slice(0, 2000)) + (stderrFiltered.length > 2000 ? "…" : "")]);
         var tableRows = rows.map(function (r) {

@@ -101,6 +101,7 @@ export async function runExtractionOnly(options: RunOptions = {}): Promise<FullR
 /**
  * Pipeline: sync with a single limit; as each file is synced, queue it for extraction in the background.
  * When sync finishes, wait for all extraction jobs to complete, then return metrics and report.
+ * limit 0 or undefined = no limit (sync and extract all).
  */
 export async function runSyncExtractPipeline(options: PipelineOptions = {}): Promise<FullRunResult> {
   const config = loadConfig(options.configPath);
@@ -109,21 +110,9 @@ export async function runSyncExtractPipeline(options: PipelineOptions = {}): Pro
       ? filterBucketsByTenantPurchaser(config.s3.buckets, options.tenant, options.purchaser)
       : undefined;
 
-  const limit = options.limit !== undefined && options.limit > 0 ? options.limit : 0;
-  if (limit <= 0) {
-    const runResult = await runExtraction(config, {
-      extractLimit: 0,
-      tenant: options.tenant,
-      purchaser: options.purchaser,
-    });
-    const metrics = computeMetrics(
-      runResult.runId,
-      runResult.records,
-      runResult.startedAt,
-      runResult.finishedAt
-    );
-    return { config, syncResults: [], run: runResult, metrics };
-  }
+  const limit = options.limit;
+  const effectiveSyncLimit =
+    limit !== undefined && limit > 0 ? limit : undefined;
 
   const db = openCheckpointDb(config.run.checkpointPath);
   const runId = getOrCreateRunId(db);
@@ -140,7 +129,7 @@ export async function runSyncExtractPipeline(options: PipelineOptions = {}): Pro
   };
 
   syncResults = await syncAllBuckets(config, {
-    syncLimit: limit,
+    syncLimit: effectiveSyncLimit,
     buckets: bucketsFilter,
     onProgress: options.onProgress,
     onFileSynced,
