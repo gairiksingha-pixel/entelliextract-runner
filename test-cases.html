@@ -549,10 +549,10 @@
         box-shadow: 0 2px 6px rgba(0,0,0,0.2);
       }
       button.download-report-btn.download-report-json-btn {
-        background: #c17a0a;
+        background: #5c4d7a;
       }
       button.download-report-btn.download-report-json-btn:hover:not(:disabled) {
-        background: #9d6208;
+        background: #4a3f62;
         box-shadow: 0 2px 6px rgba(0,0,0,0.2);
       }
       button.download-sync-report-btn:disabled,
@@ -837,8 +837,8 @@
       })();
       const ROWS = [
         { id: "P1", scenario: "S3 Sync — Download files to staging", limits: { sync: true, extract: false } },
-        { id: "P2", scenario: "Extract & Report — Run extraction and generate report", limits: { sync: false, extract: true } },
-        { id: "PIPE", scenario: "Sync & Extract (pipeline) — Sync and extract each file in background as it's synced", limits: { pipeline: true } },
+        { id: "P2", scenario: "Extract — Run extraction with staging files", limits: { sync: false, extract: true } },
+        { id: "PIPE", scenario: "Sync & Extract (pipeline) — Sync and extract with staging files", limits: { pipeline: true } },
       ];
 
       function renderLimitsCell(c) {
@@ -1506,25 +1506,31 @@
       function downloadLatestReport(btn, format) {
         if (btn) btn.disabled = true;
         fetch("/api/reports")
-          .then(function (r) { return r.json(); })
+          .then(function (r) {
+            if (!r.ok) throw new Error("Could not load report list");
+            return r.json();
+          })
           .then(function (list) {
             var reports = list[format] || [];
             if (reports.length === 0) {
+              alert("No " + (format === "html" ? "summary" : "extraction") + " report found. Run a case first to generate reports.");
               if (btn) btn.disabled = false;
               return;
             }
             var latest = reports[0];
             var filename = latest.name;
             var url = "/api/reports/" + format + "/" + encodeURIComponent(filename);
-            return fetch(url).then(function (r) { return r.blob(); }).then(function (blob) {
-              var a = document.createElement("a");
-              a.href = URL.createObjectURL(blob);
-              a.download = filename;
-              a.click();
-              URL.revokeObjectURL(a.href);
-            });
+            var a = document.createElement("a");
+            a.href = url;
+            a.download = filename;
+            a.style.display = "none";
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
           })
-          .catch(function () {})
+          .catch(function (err) {
+            alert("Download failed: " + (err && err.message ? err.message : "Could not fetch report list."));
+          })
           .then(function () {
             if (btn) btn.disabled = false;
           });

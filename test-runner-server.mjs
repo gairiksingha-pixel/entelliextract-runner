@@ -8,7 +8,7 @@
 import { createServer } from 'node:http';
 import { spawn } from 'node:child_process';
 import { createRequire } from 'node:module';
-import { readFileSync, readdirSync, writeFileSync, existsSync, copyFileSync, statSync } from 'node:fs';
+import { readFileSync, readdirSync, writeFileSync, existsSync, copyFileSync, statSync, createReadStream } from 'node:fs';
 import { join, dirname, extname, normalize, resolve, relative } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -431,13 +431,24 @@ createServer(async (req, res) => {
         res.end(JSON.stringify({ error: 'Not found' }));
         return;
       }
-      const content = readFileSync(filePath, 'utf-8');
+      const stat = statSync(filePath);
       const contentType = format === 'html' ? 'text/html' : 'application/json';
-      res.writeHead(200, {
+      const headers = {
         'Content-Type': contentType,
         'Content-Disposition': 'attachment; filename="' + filename.replace(/"/g, '\\"') + '"',
+        'Content-Length': stat.size,
+      };
+      res.writeHead(200, headers);
+      req.setTimeout(0);
+      res.setTimeout(0);
+      const stream = createReadStream(filePath);
+      stream.on('error', (e) => {
+        if (!res.writableEnded) {
+          res.writeHead(500, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ error: String(e.message) }));
+        }
       });
-      res.end(content);
+      stream.pipe(res);
     } catch (e) {
       res.writeHead(500, { 'Content-Type': 'application/json' });
       res.end(JSON.stringify({ error: String(e.message) }));
