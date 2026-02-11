@@ -747,7 +747,7 @@
             var total = Number(syncProgress.total) || 0;
             var pct = total > 0 ? Math.min(100, Math.round((100 * done) / total)) : 0;
             extra +=
-              '<div class="sync-progress-wrap">Downloads: ' +
+              '<div class="sync-progress-wrap">Downloading: ' +
               (total > 0 ? done + " / " + total : done + " file(s)") +
               '</div>' +
               (total > 0
@@ -759,7 +759,7 @@
             var extTotal = Number(extractionProgress.total) || 0;
             var extPct = extTotal > 0 ? Math.min(100, Math.round((100 * extDone) / extTotal)) : 0;
             extra +=
-              '<div class="sync-progress-wrap extraction-progress-wrap">Extraction: ' +
+              '<div class="sync-progress-wrap extraction-progress-wrap">Extracting: ' +
               (extTotal > 0 ? extDone + " / " + extTotal : extDone + " file(s)") +
               '</div>' +
               (extTotal > 0
