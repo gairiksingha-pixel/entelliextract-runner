@@ -1,9 +1,57 @@
 /**
- * Compute run metrics: throughput, latency percentiles, error rate, anomalies.
+ * Compute run metrics: throughput, latency percentiles, error rate, anomalies,
+ * failure breakdown by error type, top 5 slowest files, failures by brand.
  */
 
 import { quantile } from 'simple-statistics';
-import type { CheckpointRecord, RunMetrics, Anomaly } from './types.js';
+import type { CheckpointRecord, RunMetrics, Anomaly, FailureBreakdown } from './types.js';
+
+const TOP_SLOWEST_N = 5;
+
+function inferErrorType(record: CheckpointRecord): keyof FailureBreakdown {
+  const code = record.statusCode ?? 0;
+  const msg = (record.errorMessage ?? '').toLowerCase();
+  if (code === 0) {
+    if (/timeout|abort|etimedout|econnaborted/.test(msg)) return 'timeout';
+    if (/^read file:/i.test(record.errorMessage ?? '')) return 'readError';
+    return 'other';
+  }
+  if (code >= 500) return 'serverError';
+  if (code >= 400) return 'clientError';
+  return 'other';
+}
+
+function computeFailureBreakdown(failed: CheckpointRecord[]): FailureBreakdown {
+  const breakdown: FailureBreakdown = {
+    timeout: 0,
+    clientError: 0,
+    serverError: 0,
+    readError: 0,
+    other: 0,
+  };
+  for (const r of failed) {
+    breakdown[inferErrorType(r)] += 1;
+  }
+  return breakdown;
+}
+
+function computeTopSlowestFiles(done: CheckpointRecord[]): { filePath: string; latencyMs: number }[] {
+  return done
+    .filter((r) => typeof r.latencyMs === 'number' && r.latencyMs >= 0)
+    .sort((a, b) => (b.latencyMs ?? 0) - (a.latencyMs ?? 0))
+    .slice(0, TOP_SLOWEST_N)
+    .map((r) => ({ filePath: r.filePath, latencyMs: r.latencyMs! }));
+}
+
+function computeFailureCountByBrand(failed: CheckpointRecord[]): { brand: string; count: number }[] {
+  const byBrand = new Map<string, number>();
+  for (const r of failed) {
+    byBrand.set(r.brand, (byBrand.get(r.brand) ?? 0) + 1);
+  }
+  return Array.from(byBrand.entries())
+    .map(([brand, count]) => ({ brand, count }))
+    .sort((a, b) => b.count - a.count);
+}
 
 export function computeMetrics(
   runId: string,
@@ -16,9 +64,14 @@ export function computeMetrics(
   const skipped = records.filter((r) => r.status === 'skipped');
   const latencies = done.map((r) => r.latencyMs!).filter((n) => typeof n === 'number' && n >= 0);
   const totalLatencyMs = latencies.reduce((a, b) => a + b, 0);
-  const durationSeconds = (finishedAt.getTime() - startedAt.getTime()) / 1000;
+  // Total time spent on extraction = sum of latency for all processed files (done + error with latency)
+  const totalProcessingTimeMs = records
+    .filter((r) => (r.status === 'done' || r.status === 'error') && typeof r.latencyMs === 'number' && r.latencyMs >= 0)
+    .reduce((sum, r) => sum + (r.latencyMs ?? 0), 0);
   const processed = done.length + failed.length;
-  const throughputPerSecond = durationSeconds > 0 ? processed / durationSeconds : 0;
+  const totalProcessingTimeSeconds = totalProcessingTimeMs / 1000;
+  const throughputPerSecond = totalProcessingTimeSeconds > 0 ? processed / totalProcessingTimeSeconds : 0;
+  const throughputPerMinute = throughputPerSecond * 60;
 
   const avgLatencyMs = latencies.length ? totalLatencyMs / latencies.length : 0;
   const p50LatencyMs = latencies.length ? quantile(latencies, 0.5) : 0;
@@ -27,6 +80,9 @@ export function computeMetrics(
   const errorRate = processed > 0 ? failed.length / processed : 0;
 
   const anomalies = detectAnomalies(records, p95LatencyMs);
+  const failureBreakdown = computeFailureBreakdown(failed);
+  const topSlowestFiles = computeTopSlowestFiles(done);
+  const failureCountByBrand = computeFailureCountByBrand(failed);
 
   return {
     runId,
@@ -37,14 +93,19 @@ export function computeMetrics(
     failed: failed.length,
     skipped: skipped.length,
     totalLatencyMs,
+    totalProcessingTimeMs,
     latenciesMs: latencies,
     throughputPerSecond,
+    throughputPerMinute,
     avgLatencyMs,
     p50LatencyMs,
     p95LatencyMs,
     p99LatencyMs,
     errorRate,
     anomalies,
+    failureBreakdown,
+    topSlowestFiles,
+    failureCountByBrand,
   };
 }
 

@@ -89,6 +89,15 @@ export interface RequestResponseLogEntry {
   success: boolean;
 }
 
+/** Failure counts by inferred error type (timeout, 4xx, 5xx, read error, other). */
+export interface FailureBreakdown {
+  timeout: number;
+  clientError: number;
+  serverError: number;
+  readError: number;
+  other: number;
+}
+
 export interface RunMetrics {
   runId: string;
   startedAt: string;
@@ -98,14 +107,23 @@ export interface RunMetrics {
   failed: number;
   skipped: number;
   totalLatencyMs: number;
+  /** Sum of extraction latency for all processed files (done + error). Used for "Run duration" in report. */
+  totalProcessingTimeMs: number;
   latenciesMs: number[];
   throughputPerSecond: number;
+  throughputPerMinute: number;
   avgLatencyMs: number;
   p50LatencyMs: number;
   p95LatencyMs: number;
   p99LatencyMs: number;
   errorRate: number;
   anomalies: Anomaly[];
+  /** Failure counts by error type (only when failed > 0). */
+  failureBreakdown: FailureBreakdown;
+  /** Top 5 slowest files by processing time (from completed requests). */
+  topSlowestFiles: { filePath: string; latencyMs: number }[];
+  /** Failure count per brand (only brands with at least one failure). */
+  failureCountByBrand: { brand: string; count: number }[];
 }
 
 export interface Anomaly {

@@ -149,7 +149,7 @@ export function buildSummary(metrics: RunMetrics): ExecutiveSummary {
 
 function sectionForRun(entry: HistoricalRunSummary, isFirst: boolean): string {
   const m = entry.metrics;
-  const duration = formatDuration(entry.runDurationSeconds * 1000);
+  const runDuration = formatDuration(m.totalProcessingTimeMs);
   const anomalyItems = m.anomalies.map((a) => {
     const pathSuffix = a.filePath ? ' (' + escapeHtml(a.filePath) + ')' : '';
     return '<li><strong>' + escapeHtml(a.type) + '</strong>: ' + escapeHtml(a.message) + pathSuffix + '</li>';
@@ -182,6 +182,49 @@ function sectionForRun(entry: HistoricalRunSummary, isFirst: boolean): string {
     <div class="tab-pane extraction-accordion" data-tab-pane="failed">${accordionHtml(failedResults)}</div>
   </div>`
       : '';
+  const b = m.failureBreakdown;
+  const failureBreakdownRows = m.failed > 0
+    ? [
+        b.timeout ? `<tr><td>Timeout</td><td>${b.timeout}</td></tr>` : '',
+        b.clientError ? `<tr><td>Client error (4xx)</td><td>${b.clientError}</td></tr>` : '',
+        b.serverError ? `<tr><td>Service error (5xx)</td><td>${b.serverError}</td></tr>` : '',
+        b.readError ? `<tr><td>Read file error</td><td>${b.readError}</td></tr>` : '',
+        b.other ? `<tr><td>Other</td><td>${b.other}</td></tr>` : '',
+      ].filter(Boolean).join('')
+    : '';
+  const failureBreakdownSection = m.failed > 0
+    ? `
+  <h3>Failure breakdown by error type</h3>
+  <table>
+    <tr><th>Error type</th><th>Count</th></tr>
+    ${failureBreakdownRows}
+  </table>`
+    : '';
+
+  const topSlowestRows = m.topSlowestFiles
+    .map((e) => `<tr><td class="file-path">${escapeHtml(e.filePath)}</td><td>${e.latencyMs.toFixed(0)}</td></tr>`)
+    .join('');
+  const topSlowestSection = m.topSlowestFiles.length > 0
+    ? `
+  <h3>Top ${m.topSlowestFiles.length} slowest files (by processing time)</h3>
+  <table>
+    <tr><th>File</th><th>Latency (ms)</th></tr>
+    ${topSlowestRows}
+  </table>`
+    : '';
+
+  const failuresByBrandRows = m.failureCountByBrand
+    .map((e) => `<tr><td>${escapeHtml(e.brand)}</td><td>${e.count}</td></tr>`)
+    .join('');
+  const failuresByBrandSection = m.failureCountByBrand.length > 0
+    ? `
+  <h3>Failures by brand (repeated failures)</h3>
+  <table>
+    <tr><th>Brand</th><th>Failure count</th></tr>
+    ${failuresByBrandRows}
+  </table>`
+    : '';
+
   const openAttr = isFirst ? ' open' : '';
   return `
   <details class="run-section"${openAttr}>
@@ -194,8 +237,8 @@ function sectionForRun(entry: HistoricalRunSummary, isFirst: boolean): string {
     <tr><td>Success</td><td>${m.success}</td></tr>
     <tr><td>Failed</td><td>${m.failed}</td></tr>
     <tr><td>Skipped</td><td>${m.skipped}</td></tr>
-    <tr><td>Run duration</td><td>${duration}</td></tr>
-    <tr><td>Throughput</td><td>${m.throughputPerSecond.toFixed(2)} files/sec</td></tr>
+    <tr><td>Run duration (total processing time)</td><td>${runDuration}</td></tr>
+    <tr><td>Throughput</td><td>${m.throughputPerSecond.toFixed(2)} files/sec, ${m.throughputPerMinute.toFixed(2)} files/min</td></tr>
     <tr><td>Error rate</td><td>${(m.errorRate * 100).toFixed(2)}%</td></tr>
   </table>
   <h3>Latency (ms)</h3>
@@ -206,6 +249,9 @@ function sectionForRun(entry: HistoricalRunSummary, isFirst: boolean): string {
     <tr><td>P95</td><td>${m.p95LatencyMs.toFixed(2)}</td></tr>
     <tr><td>P99</td><td>${m.p99LatencyMs.toFixed(2)}</td></tr>
   </table>
+  ${failureBreakdownSection}
+  ${topSlowestSection}
+  ${failuresByBrandSection}
   <h3>Anomalies</h3>
   ${anomaliesList}
   ${extractionSection}
@@ -257,6 +303,7 @@ function htmlReportFromHistory(historicalSummaries: HistoricalRunSummary[], gene
     .tab-btn.active { background: #216c6d; color: #fff; border-color: #216c6d; }
     .tab-pane { display: none; }
     .tab-pane.active { display: block; }
+    td.file-path { word-break: break-all; max-width: 400px; }
   </style>
 </head>
 <body>
