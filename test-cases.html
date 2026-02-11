@@ -446,6 +446,43 @@
       .result .out {
         color: var(--text-secondary);
       }
+      .result-table-wrap {
+        width: 100%;
+        border-collapse: collapse;
+        font-size: 0.8rem;
+        table-layout: fixed;
+      }
+      .result-table-wrap th,
+      .result-table-wrap td {
+        padding: 0.4rem 0.6rem;
+        text-align: left;
+        vertical-align: top;
+        border: 1px solid var(--border-light);
+        background: rgba(255,255,255,0.5);
+      }
+      .result-table-wrap th {
+        font-weight: 600;
+        color: var(--text);
+        width: 100px;
+        min-width: 100px;
+      }
+      .result-table-wrap td {
+        color: var(--text-secondary);
+        word-break: break-word;
+        white-space: pre-wrap;
+      }
+      .result-table-wrap tr.status-row th {
+        border-top: none;
+      }
+      .result-table-wrap tr.status-row td {
+        font-weight: 600;
+      }
+      .result.pass .result-table-wrap tr.status-row td {
+        color: var(--pass);
+      }
+      .result.fail .result-table-wrap tr.status-row td {
+        color: var(--fail);
+      }
     </style>
   </head>
   <body>
@@ -664,26 +701,24 @@
               .join("\n")
               .trim()
           : "";
-        var out = [stdoutFiltered, stderrStr].filter(Boolean).join("\n");
-        var noOutput = !out;
-        var exitLabel, outHtml;
-        if (noOutput) {
-          if (exit === 0) {
-            exitLabel = "Success";
-            outHtml =
-              "Command completed successfully with no console output (exit code 0). " +
-              "Sync, extraction, or report may have run without printing to stdout/stderr.";
-          } else {
-            exitLabel = "Failed (exit " + exit + ")";
-            outHtml =
-              "Command produced no output. Check server logs or run the command in a terminal for details.";
-          }
-        } else {
-          exitLabel = "Exit " + exit;
-          outHtml = escapeHtml(out.slice(0, 2000)) + (out.length > 2000 ? "…" : "");
-        }
+        var noOutput = !stdoutFiltered && !stderrStr;
+        var statusLabel = pass ? "Pass" : "Fail";
+        var stdoutDisplay = stdoutFiltered
+          ? escapeHtml(stdoutFiltered.slice(0, 2000)) + (stdoutFiltered.length > 2000 ? "…" : "")
+          : (noOutput && exit === 0
+            ? "Command completed successfully with no console output (exit code 0). Sync, extraction, or report may have run without printing to stdout/stderr."
+            : noOutput && exit !== 0
+              ? "Command produced no output. Check server logs or run the command in a terminal for details."
+              : "—");
+        var stderrDisplay = stderrStr
+          ? escapeHtml(stderrStr.slice(0, 2000)) + (stderrStr.length > 2000 ? "…" : "")
+          : "—";
         div.innerHTML =
-          '<span class="exit">' + escapeHtml(exitLabel) + '</span>\n<span class="out">' + outHtml + "</span>";
+          '<table class="result-table-wrap">' +
+            '<tr class="status-row"><th>Status</th><td>' + escapeHtml(statusLabel) + '</td></tr>' +
+            '<tr><th>Standard output</th><td>' + stdoutDisplay + '</td></tr>' +
+            '<tr><th>Standard error</th><td>' + stderrDisplay + '</td></tr>' +
+          '</table>';
       }
 
       function resetCase(resultDiv) {
