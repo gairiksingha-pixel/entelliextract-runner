@@ -2,12 +2,19 @@
  * Runner: orchestrates sync (optional) and extraction run, then returns result for reporting.
  */
 
+import PQueue from 'p-queue';
 import { loadConfig } from './config.js';
 import { syncAllBuckets, type SyncResult } from './s3-sync.js';
-import { runExtraction } from './load-engine.js';
+import {
+  runExtraction,
+  extractOneFile,
+  type FileJob,
+  type LoadEngineResult,
+} from './load-engine.js';
+import { openCheckpointDb, getOrCreateRunId, getRecordsForRun, closeCheckpointDb } from './checkpoint.js';
+import { initRequestResponseLogger, closeRequestResponseLogger } from './logger.js';
 import { computeMetrics } from './metrics.js';
 import type { Config, RunMetrics } from './types.js';
-import type { LoadEngineResult } from './load-engine.js';
 
 export interface RunOptions {
   configPath?: string;
@@ -20,6 +27,14 @@ export interface RunOptions {
   tenant?: string;
   /** Sync/run only for this purchaser (requires tenant). */
   purchaser?: string;
+}
+
+/** Single limit for pipeline mode: sync up to N files and extract each as it is synced (in background). */
+export interface PipelineOptions extends RunOptions {
+  /** Max files to sync; each synced file is extracted immediately in background. */
+  limit?: number;
+  /** Optional progress callback for sync phase (done, total). */
+  onProgress?: (done: number, total: number) => void;
 }
 
 export interface FullRunResult {
@@ -81,4 +96,74 @@ export async function runFull(options: RunOptions = {}): Promise<FullRunResult> 
  */
 export async function runExtractionOnly(options: RunOptions = {}): Promise<FullRunResult> {
   return runFull({ ...options, skipSync: true });
+}
+
+/**
+ * Pipeline: sync with a single limit; as each file is synced, queue it for extraction in the background.
+ * When sync finishes, wait for all extraction jobs to complete, then return metrics and report.
+ */
+export async function runSyncExtractPipeline(options: PipelineOptions = {}): Promise<FullRunResult> {
+  const config = loadConfig(options.configPath);
+  const bucketsFilter =
+    options.tenant && options.purchaser
+      ? filterBucketsByTenantPurchaser(config.s3.buckets, options.tenant, options.purchaser)
+      : undefined;
+
+  const limit = options.limit !== undefined && options.limit > 0 ? options.limit : 0;
+  if (limit <= 0) {
+    const runResult = await runExtraction(config, {
+      extractLimit: 0,
+      tenant: options.tenant,
+      purchaser: options.purchaser,
+    });
+    const metrics = computeMetrics(
+      runResult.runId,
+      runResult.records,
+      runResult.startedAt,
+      runResult.finishedAt
+    );
+    return { config, syncResults: [], run: runResult, metrics };
+  }
+
+  const db = openCheckpointDb(config.run.checkpointPath);
+  const runId = getOrCreateRunId(db);
+  initRequestResponseLogger(config, runId);
+
+  const concurrency = config.run.concurrency;
+  const extractionQueue = new PQueue({ concurrency });
+
+  const startedAt = new Date();
+  let syncResults: SyncResult[] = [];
+
+  const onFileSynced = (job: FileJob) => {
+    extractionQueue.add(() => extractOneFile(config, runId, db, job));
+  };
+
+  syncResults = await syncAllBuckets(config, {
+    syncLimit: limit,
+    buckets: bucketsFilter,
+    onProgress: options.onProgress,
+    onFileSynced,
+  });
+
+  await extractionQueue.onIdle();
+  const finishedAt = new Date();
+  const records = getRecordsForRun(db, runId);
+  closeRequestResponseLogger();
+  closeCheckpointDb(db);
+
+  const metrics = computeMetrics(runId, records, startedAt, finishedAt);
+  const runResult: LoadEngineResult = {
+    runId,
+    records,
+    startedAt,
+    finishedAt,
+  };
+
+  return {
+    config,
+    syncResults,
+    run: runResult,
+    metrics,
+  };
 }

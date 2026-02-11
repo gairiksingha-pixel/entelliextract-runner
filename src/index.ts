@@ -7,7 +7,7 @@
 import { program } from 'commander';
 import { loadConfig, getConfigPath } from './config.js';
 import { syncAllBuckets, printSyncResults } from './s3-sync.js';
-import { runFull, runExtractionOnly } from './runner.js';
+import { runFull, runExtractionOnly, runSyncExtractPipeline } from './runner.js';
 import type { Config } from './types.js';
 import { buildSummary, writeReports } from './report.js';
 import { openCheckpointDb, getRecordsForRun, closeCheckpointDb } from './checkpoint.js';
@@ -118,6 +118,9 @@ program
         printSyncResults(result.syncResults, syncLimit);
       }
       console.log(`Run ${result.run.runId} finished. Success: ${result.metrics.success}, Failed: ${result.metrics.failed}, Skipped: ${result.metrics.skipped}`);
+      if (result.metrics.success === 0 && result.metrics.failed === 0) {
+        console.log('All files in the stage are extracted. Please sync new files.');
+      }
       if (result.metrics.success > 0) {
         const extractionsDir = `${dirname(config.report.outputDir)}/extractions/${result.run.runId}`;
         console.log(`Extraction result(s): ${extractionsDir} (full API response JSON per file)`);
@@ -130,6 +133,71 @@ program
       }
     } catch (e) {
       console.error('Run failed:', e instanceof Error ? e.message : String(e));
+      process.exit(1);
+    }
+  });
+
+program
+  .command('sync-extract')
+  .description('Pipeline: sync up to N files; as each file is synced, extract it in the background. One count for both sync and extract.')
+  .option('--limit <n>', 'Max number of files to sync (and extract). Each synced file is extracted automatically.', Number.parseInt)
+  .option('--tenant <name>', 'Sync/extract only for this tenant (requires --purchaser)')
+  .option('--purchaser <name>', 'Sync/extract only for this purchaser (requires --tenant)')
+  .option('--no-report', 'Do not write report after run')
+  .action(async (cmdOpts: { limit?: number; tenant?: string; purchaser?: string; report?: boolean }) => {
+    try {
+      const globalOpts = program.opts() as { config?: string };
+      const config = loadConfig(globalOpts.config ?? getConfigPath());
+      const doReport = cmdOpts.report === true || cmdOpts.report === undefined;
+      const limit =
+        cmdOpts.limit === undefined || Number.isNaN(cmdOpts.limit) ? undefined : cmdOpts.limit;
+      const tenant = cmdOpts.tenant?.trim();
+      const purchaser = cmdOpts.purchaser?.trim();
+      if (tenant && !purchaser) {
+        console.error('--purchaser is required when --tenant is set.');
+        process.exit(1);
+      }
+      if (purchaser && !tenant) {
+        console.error('--tenant is required when --purchaser is set.');
+        process.exit(1);
+      }
+      if (tenant && purchaser) console.log(`Scoped to tenant: ${tenant}, purchaser: ${purchaser}`);
+      const stdoutPiped = typeof process !== 'undefined' && process.stdout?.isTTY !== true;
+      const limitNum = limit !== undefined && limit > 0 ? limit : 0;
+      if (stdoutPiped && limitNum > 0) process.stdout.write(`SYNC_PROGRESS\t0\t${limitNum}\n`);
+      const result = await runSyncExtractPipeline({
+        configPath: globalOpts.config,
+        limit,
+        tenant,
+        purchaser,
+        onProgress:
+          stdoutPiped && limitNum > 0
+            ? (done, total) => {
+                process.stdout.write(`SYNC_PROGRESS\t${done}\t${total}\n`);
+              }
+            : undefined,
+      });
+      if (result.syncResults && result.syncResults.length > 0) {
+        printSyncResults(result.syncResults, limit ?? undefined);
+      }
+      console.log(
+        `Run ${result.run.runId} finished. Success: ${result.metrics.success}, Failed: ${result.metrics.failed}, Skipped: ${result.metrics.skipped}`
+      );
+      if (result.metrics.success === 0 && result.metrics.failed === 0) {
+        console.log('All files in the stage are extracted. Please sync new files.');
+      }
+      if (result.metrics.success > 0) {
+        const extractionsDir = `${dirname(config.report.outputDir)}/extractions/${result.run.runId}`;
+        console.log(`Extraction result(s): ${extractionsDir} (full API response JSON per file)`);
+      }
+      saveLastRunId(config, result.run.runId);
+      if (doReport) {
+        const summary = buildSummary(result.metrics);
+        const paths = writeReports(config, summary);
+        console.log('Report(s) written:', paths);
+      }
+    } catch (e) {
+      console.error('Sync-extract failed:', e instanceof Error ? e.message : String(e));
       process.exit(1);
     }
   });

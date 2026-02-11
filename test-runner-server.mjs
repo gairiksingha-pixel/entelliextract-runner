@@ -110,10 +110,19 @@ function runArgs(p, extra = []) {
   if (p?.purchaser) base.push('--purchaser', p.purchaser);
   return ['node', base, { cwd: ROOT }];
 }
+function pipelineArgs(p) {
+  const base = ['dist/index.js', 'sync-extract'];
+  const limit = p?.syncLimit !== undefined && Number(p.syncLimit) >= 0 ? Number(p.syncLimit) : 0;
+  base.push('--limit', String(limit));
+  if (p?.tenant) base.push('--tenant', p.tenant);
+  if (p?.purchaser) base.push('--purchaser', p.purchaser);
+  return ['node', base, { cwd: ROOT }];
+}
 
 const CASE_COMMANDS = {
   P1: (p) => syncArgs(p),
   P2: (p) => runArgs(p, ['--no-sync']),
+  PIPE: (p) => pipelineArgs(p),
   P3: () => ['node', ['dist/index.js', 'report'], { cwd: ROOT }],
   P4: (p) => {
     const base = ['dist/index.js', 'sync', '-c', 'config/config.yaml'];

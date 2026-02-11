@@ -6,7 +6,7 @@
 
 import { ListObjectsV2Command, GetObjectCommand, S3Client } from '@aws-sdk/client-s3';
 import { createWriteStream, createReadStream, mkdirSync, existsSync, readFileSync, writeFileSync } from 'node:fs';
-import { join, dirname } from 'node:path';
+import { join, dirname, relative } from 'node:path';
 import { pipeline } from 'node:stream/promises';
 import { Readable } from 'node:stream';
 import { createHash } from 'node:crypto';
@@ -126,6 +126,8 @@ export async function syncBucket(
     onProgress?: (done: number, total: number) => void;
     /** Used for progress: limit when set, 0 when no limit (unknown total). */
     initialLimit: number;
+    /** When set, called after each file is successfully synced (for pipeline: trigger extraction). */
+    onFileSynced?: (job: { filePath: string; relativePath: string; brand: string }) => void;
   }
 ): Promise<{ brand: string; stagingPath: string; synced: number; skipped: number; errors: number }> {
   const prefix = bucketConfig.prefix ?? '';
@@ -171,6 +173,10 @@ export async function syncBucket(
       options.manifest[mk] = sha;
       synced++;
       options.limitRemaining.value--;
+      if (options.onFileSynced) {
+        const relativePath = relative(brandDir, destPath).replace(/\\/g, '/');
+        options.onFileSynced({ filePath: destPath, relativePath, brand });
+      }
       reportProgress();
     } catch (e) {
       errors++;
@@ -194,6 +200,7 @@ export async function syncAllBuckets(
     syncLimit?: number;
     buckets?: S3BucketConfig[];
     onProgress?: (done: number, total: number) => void;
+    onFileSynced?: (job: { filePath: string; relativePath: string; brand: string }) => void;
   }
 ): Promise<SyncResult[]> {
   const client = getS3Client(config.s3.region);
@@ -217,6 +224,7 @@ export async function syncAllBuckets(
       limitRemaining,
       onProgress: overrides?.onProgress,
       initialLimit,
+      onFileSynced: overrides?.onFileSynced,
     });
     results.push(result);
   }

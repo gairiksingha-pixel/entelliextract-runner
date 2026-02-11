@@ -94,8 +94,13 @@ export function openCheckpointDb(checkpointPath: string): CheckpointDb {
   return { _path: path, _data };
 }
 
+/** Generate a new run ID without persisting it (for "no work" runs so we don't overwrite the current run). */
+export function createRunIdOnly(): string {
+  return `run_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`;
+}
+
 export function startRun(db: CheckpointDb): string {
-  const runId = `run_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`;
+  const runId = createRunIdOnly();
   db._data.run_meta[RUN_ID_KEY] = runId;
   saveStore(db);
   return runId;

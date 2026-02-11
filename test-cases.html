@@ -145,7 +145,7 @@
         max-width: 100%;
       }
       .table-section {
-        flex: 9 1 0%;
+        flex: 1 1 0%;
         min-height: 0;
         overflow: hidden;
         display: flex;
@@ -156,49 +156,6 @@
       }
       .table-section table {
         height: 100%;
-      }
-      .bottom-panel {
-        flex: 1 1 0%;
-        min-height: 80px;
-        max-height: 20vh;
-        margin-top: 1rem;
-        padding: 1rem 1.25rem;
-        background: var(--surface);
-        border: 1px solid var(--border);
-        box-shadow: 0 1px 2px rgba(0,0,0,0.06);
-        overflow: auto;
-        display: flex;
-        flex-direction: column;
-      }
-      .bottom-panel-title {
-        font-size: 0.9rem;
-        font-weight: 600;
-        color: var(--text);
-        margin: 0 0 0.75rem 0;
-        padding-bottom: 0.5rem;
-        border-bottom: 1px solid var(--border);
-      }
-      .bottom-panel-content {
-        flex: 1;
-        font-size: 0.85rem;
-        color: var(--text-secondary);
-        line-height: 1.5;
-      }
-      .bottom-panel-content p {
-        margin: 0 0 0.5rem 0;
-      }
-      .bottom-panel-placeholder {
-        color: var(--muted);
-        font-style: italic;
-      }
-      .bottom-panel-content code {
-        background: var(--row-alt);
-        padding: 0.15rem 0.35rem;
-        border-radius: 2px;
-        font-size: 0.85em;
-        border: 1px solid var(--border-light);
-      }
-      .table-section table {
         width: 100%;
         table-layout: fixed;
         border-collapse: collapse;
@@ -222,10 +179,10 @@
         height: 100%;
       }
       tbody tr {
-        height: 50%;
+        height: 33.333%;
       }
       tbody td {
-        height: 50%;
+        height: 33.333%;
         box-sizing: border-box;
       }
       thead th {
@@ -272,12 +229,14 @@
         font-size: 0.85rem;
         color: var(--text-secondary);
         overflow: hidden;
+        vertical-align: top;
       }
       .limits-cell .limit-row {
         display: grid;
         grid-template-columns: auto 56px;
         gap: 0.5rem 0.75rem;
         align-items: center;
+        min-height: 2.5rem;
       }
       .limits-cell .limit-label {
         white-space: nowrap;
@@ -304,36 +263,27 @@
         font-style: italic;
       }
       .run-cell {
-        width: 220px;
-        min-width: 220px;
-        max-width: 220px;
+        width: 180px;
+        min-width: 180px;
+        max-width: 180px;
         text-align: center;
-        vertical-align: middle;
+        vertical-align: top;
       }
       .run-cell .btn-group {
-        display: flex;
-        flex-direction: column;
+        display: grid;
+        grid-template-columns: 1fr 1fr;
         gap: 0.5rem;
-        align-items: center;
-        width: fit-content;
+        width: 100%;
         margin: 0 auto;
-        min-width: 186px;
-      }
-      .run-cell .btn-row {
-        display: flex;
-        gap: 0.5rem;
-        justify-content: center;
-        flex-wrap: nowrap;
-        width: 100%;
-      }
-      .btn-row-download {
-        display: flex;
-        gap: 0.5rem;
-        width: 100%;
+        min-width: 0;
         box-sizing: border-box;
       }
-      .btn-row-download button {
-        flex: 1;
+      .run-cell .btn-row,
+      .run-cell .btn-row-download {
+        display: contents;
+      }
+      .run-cell .btn-group > .btn-row > button,
+      .run-cell .btn-group > .btn-row-download > button {
         min-width: 0;
       }
       button.run {
@@ -345,7 +295,6 @@
         font-weight: 600;
         cursor: pointer;
         font-family: inherit;
-        min-width: 5rem;
       }
       button.run:hover {
         background: var(--primary-hover);
@@ -410,14 +359,14 @@
         cursor: not-allowed;
       }
       .result-header {
-        width: 460px;
-        min-width: 460px;
-        max-width: 460px;
+        width: 548px;
+        min-width: 548px;
+        max-width: 548px;
       }
       .result-cell {
-        width: 460px;
-        min-width: 460px;
-        max-width: 460px;
+        width: 548px;
+        min-width: 548px;
+        max-width: 548px;
         vertical-align: top;
         overflow: hidden;
         position: relative;
@@ -552,12 +501,6 @@
           <tbody id="rows"></tbody>
         </table>
       </div>
-      <section class="bottom-panel" aria-label="Reports and run info">
-        <h2 class="bottom-panel-title">Reports &amp; run info</h2>
-        <div class="bottom-panel-content">
-          <p class="bottom-panel-placeholder">After a run, reports are saved to <code>output/reports/</code>. Use the Download Report or Download Sync Report buttons above to save the latest report. This area can show the last run ID and report paths when available.</p>
-        </div>
-      </section>
     </main>
 
     <script type="module">
@@ -575,21 +518,27 @@
       const ROWS = [
         { id: "P1", scenario: "S3 Sync — Download files to staging", limits: { sync: true, extract: false } },
         { id: "P2", scenario: "Extract & Report — Run extraction and generate report", limits: { sync: false, extract: true } },
+        { id: "PIPE", scenario: "Sync & Extract (pipeline) — One count: sync and extract each file in background as it's synced", limits: { pipeline: true } },
       ];
 
       function renderLimitsCell(c) {
-        const lim = c.limits || { sync: false, extract: false };
-        if (!lim.sync && !lim.extract) {
+        const lim = c.limits || { sync: false, extract: false, pipeline: false };
+        if (!lim.sync && !lim.extract && !lim.pipeline) {
           return '<td class="limits-cell"><span class="n/a">—</span></td>';
         }
         var html = '<td class="limits-cell"><div class="limit-row">';
-        if (lim.sync) {
+        if (lim.pipeline) {
           html +=
-            '<span class="limit-label">Sync:</span><input type="number" class="limit-sync" min="0" step="1" value="0" title="Max files to download. 0 = no limit">';
-        }
-        if (lim.extract) {
-          html +=
-            '<span class="limit-label">Extract:</span><input type="number" class="limit-extract" min="0" step="1" value="0" title="Max files to extract. 0 = no limit">';
+            '<span class="limit-label">Limit:</span><input type="number" class="limit-sync" min="0" step="1" value="0" title="Max files to sync; each is extracted in background as it is synced. 0 = no limit">';
+        } else {
+          if (lim.sync) {
+            html +=
+              '<span class="limit-label">Sync:</span><input type="number" class="limit-sync" min="0" step="1" value="0" title="Max files to download. 0 = no limit">';
+          }
+          if (lim.extract) {
+            html +=
+              '<span class="limit-label">Extract:</span><input type="number" class="limit-extract" min="0" step="1" value="0" title="Max files to extract. 0 = no limit">';
+          }
         }
         html += "</div><div class=\"limit-hint\">0 = no limit</div></td>";
         return html;
@@ -659,8 +608,8 @@
         if (data) resultClass = pass ? "pass" : "fail";
         div.className = "result " + resultClass;
         var row = div.closest("tr");
-        var syncCases = ["P1"];
-        var extractCases = ["P2"];
+        var syncCases = ["P1", "PIPE"];
+        var extractCases = ["P2", "PIPE"];
         var showSync = data && pass && caseId && syncCases.includes(caseId);
         var showExtract = data && pass && caseId && extractCases.includes(caseId);
         var downloadSyncReportBtn = row ? row.querySelector(".download-sync-report-btn") : null;

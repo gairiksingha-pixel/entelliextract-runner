@@ -8,7 +8,8 @@ import { readFileSync, existsSync, readdirSync, mkdirSync, writeFileSync } from 
 import { join, relative, dirname } from 'node:path';
 import type { Config, CheckpointRecord, S3BucketConfig } from './types.js';
 import { extract, getExtractUploadUrl } from './api-client.js';
-import { openCheckpointDb, getOrCreateRunId, getCompletedPaths, upsertCheckpoint, getRecordsForRun, closeCheckpointDb } from './checkpoint.js';
+import type { CheckpointDb } from './checkpoint.js';
+import { openCheckpointDb, getOrCreateRunId, getCompletedPaths, createRunIdOnly, upsertCheckpoint, getRecordsForRun, closeCheckpointDb } from './checkpoint.js';
 import { initRequestResponseLogger, logRequestResponse, closeRequestResponseLogger } from './logger.js';
 import { getStagingSubdir } from './s3-sync.js';
 
@@ -78,6 +79,87 @@ function writeExtractionResult(
 }
 
 /**
+ * Extract a single file (for pipeline: called as each file is synced). Caller must have opened the checkpoint db and initialized the request/response logger.
+ */
+export async function extractOneFile(
+  config: Config,
+  runId: string,
+  db: CheckpointDb,
+  job: FileJob
+): Promise<void> {
+  const started = new Date().toISOString();
+  upsertCheckpoint(db, {
+    filePath: job.filePath,
+    relativePath: job.relativePath,
+    brand: job.brand,
+    status: 'running',
+    startedAt: started,
+    runId,
+  });
+
+  let bodyBase64: string | undefined;
+  try {
+    bodyBase64 = readFileSync(job.filePath, { encoding: 'base64' });
+  } catch (e) {
+    const errMsg = e instanceof Error ? e.message : String(e);
+    upsertCheckpoint(db, {
+      filePath: job.filePath,
+      relativePath: job.relativePath,
+      brand: job.brand,
+      status: 'error',
+      startedAt: started,
+      finishedAt: new Date().toISOString(),
+      errorMessage: `Read file: ${errMsg}`,
+      runId,
+    });
+    return;
+  }
+
+  const result = await extract(config, {
+    filePath: job.filePath,
+    fileContentBase64: bodyBase64,
+    brand: job.brand,
+  });
+
+  logRequestResponse({
+    runId,
+    filePath: job.filePath,
+    brand: job.brand,
+    request: {
+      method: 'POST',
+      url: getExtractUploadUrl(config),
+      bodyPreview: undefined,
+      bodyLength: bodyBase64?.length,
+    },
+    response: {
+      statusCode: result.statusCode,
+      latencyMs: result.latencyMs,
+      bodyPreview: result.body.slice(0, 500),
+      bodyLength: result.body.length,
+      headers: result.headers,
+    },
+    success: result.success,
+  });
+
+  const status = result.success ? 'done' : 'error';
+  if (result.success && result.body) {
+    writeExtractionResult(config, runId, job, result.body);
+  }
+  upsertCheckpoint(db, {
+    filePath: job.filePath,
+    relativePath: job.relativePath,
+    brand: job.brand,
+    status,
+    startedAt: started,
+    finishedAt: new Date().toISOString(),
+    latencyMs: result.latencyMs,
+    statusCode: result.statusCode,
+    errorMessage: result.success ? undefined : result.body.slice(0, 500),
+    runId,
+  });
+}
+
+/**
  * Run extraction against all staging files with concurrency and optional rate limit.
  * Checkpoints each file so the run can be resumed.
  * @param options.extractLimit - Max number of files to process (0 = no limit). Overrides config when set from CLI.
@@ -104,6 +186,12 @@ export async function runExtraction(
   const extractLimit = options?.extractLimit;
   if (extractLimit !== undefined && extractLimit > 0) {
     toProcess = toProcess.slice(0, extractLimit);
+  }
+  // When there is nothing to extract (all done or no files), use a new run ID for this invocation only (do not persist as current run) so metrics are 0 and the next run still sees previously completed files and shows "All files in the stage are extracted. Please sync new files." again.
+  let runIdToUse = runId;
+  if (toProcess.length === 0) {
+    runIdToUse = createRunIdOnly();
+    initRequestResponseLogger(config, runIdToUse);
   }
   const concurrency = config.run.concurrency;
   const intervalCap = config.run.requestsPerSecond > 0 ? config.run.requestsPerSecond : undefined;
@@ -136,7 +224,7 @@ export async function runExtraction(
         brand: job.brand,
         status: 'running',
         startedAt: started,
-        runId,
+        runId: runIdToUse,
       });
 
       let bodyBase64: string | undefined;
@@ -152,7 +240,7 @@ export async function runExtraction(
           startedAt: started,
           finishedAt: new Date().toISOString(),
           errorMessage: `Read file: ${errMsg}`,
-          runId,
+          runId: runIdToUse,
         });
         return;
       }
@@ -164,7 +252,7 @@ export async function runExtraction(
       });
 
       logRequestResponse({
-        runId,
+        runId: runIdToUse,
         filePath: job.filePath,
         brand: job.brand,
         request: {
@@ -185,7 +273,7 @@ export async function runExtraction(
 
       const status = result.success ? 'done' : 'error';
       if (result.success && result.body) {
-        writeExtractionResult(config, runId, job, result.body);
+        writeExtractionResult(config, runIdToUse, job, result.body);
       }
       upsertCheckpoint(db, {
         filePath: job.filePath,
@@ -197,7 +285,7 @@ export async function runExtraction(
         latencyMs: result.latencyMs,
         statusCode: result.statusCode,
         errorMessage: result.success ? undefined : result.body.slice(0, 500),
-        runId,
+        runId: runIdToUse,
       });
     }).finally(() => {
       done++;
@@ -211,8 +299,8 @@ export async function runExtraction(
     process.stdout.write('\r' + ' '.repeat(60) + '\r');
   }
   const finishedAt = new Date();
-  const records = getRecordsForRun(db, runId);
+  const records = getRecordsForRun(db, runIdToUse);
   closeRequestResponseLogger();
   closeCheckpointDb(db);
-  return { runId, records, startedAt, finishedAt };
+  return { runId: runIdToUse, records, startedAt, finishedAt };
 }
