@@ -49,7 +49,7 @@ function loadJsonEntries(dir: string, extractionSuccess: boolean): ExtractionRes
 }
 
 function loadExtractionResults(config: Config, runId: string): ExtractionResultEntry[] {
-  const baseDir = join(dirname(config.report.outputDir), 'extractions', runId);
+  const baseDir = join(dirname(config.report.outputDir), 'extractions');
   if (!existsSync(baseDir)) return [];
 
   const succeededDir = join(baseDir, 'succeeded');
@@ -228,7 +228,7 @@ function sectionForRun(entry: HistoricalRunSummary, isFirst: boolean): string {
   const openAttr = isFirst ? ' open' : '';
   return `
   <details class="run-section"${openAttr}>
-  <summary class="run-section-summary"><strong>${escapeHtml(m.runId)}</strong> — ${m.success} success, ${m.failed} failed, ${m.skipped} skipped</summary>
+  <summary class="run-section-summary"><strong>Extractions</strong> — ${m.success} success, ${m.failed} failed, ${m.skipped} skipped</summary>
   <div class="run-section-body">
   <h3>Overview</h3>
   <table>

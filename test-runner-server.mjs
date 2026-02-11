@@ -95,27 +95,31 @@ function getLastRunId() {
   return readFileSync(path, 'utf-8').trim();
 }
 
+function addPairArgs(base, p) {
+  if (p?.pairs && Array.isArray(p.pairs) && p.pairs.length > 0) {
+    base.push('--pairs', JSON.stringify(p.pairs));
+  } else if (p?.tenant && p?.purchaser) {
+    base.push('--tenant', p.tenant, '--purchaser', p.purchaser);
+  }
+}
 function syncArgs(p) {
   const base = ['dist/index.js', 'sync'];
   if (p?.syncLimit > 0) base.push('--limit', String(p.syncLimit));
-  if (p?.tenant) base.push('--tenant', p.tenant);
-  if (p?.purchaser) base.push('--purchaser', p.purchaser);
+  addPairArgs(base, p);
   return ['node', base, { cwd: ROOT }];
 }
 function runArgs(p, extra = []) {
   const base = ['dist/index.js', 'run', ...extra];
   if (p?.syncLimit > 0) base.push('--sync-limit', String(p.syncLimit));
   if (p?.extractLimit > 0) base.push('--extract-limit', String(p.extractLimit));
-  if (p?.tenant) base.push('--tenant', p.tenant);
-  if (p?.purchaser) base.push('--purchaser', p.purchaser);
+  addPairArgs(base, p);
   return ['node', base, { cwd: ROOT }];
 }
 function pipelineArgs(p) {
   const base = ['dist/index.js', 'sync-extract'];
   const limit = p?.syncLimit !== undefined && Number(p.syncLimit) >= 0 ? Number(p.syncLimit) : 0;
   base.push('--limit', String(limit));
-  if (p?.tenant) base.push('--tenant', p.tenant);
-  if (p?.purchaser) base.push('--purchaser', p.purchaser);
+  addPairArgs(base, p);
   return ['node', base, { cwd: ROOT }];
 }
 
@@ -307,7 +311,7 @@ createServer(async (req, res) => {
     let body = '';
     for await (const chunk of req) body += chunk;
     try {
-      const { caseId, syncLimit, extractLimit, tenant, purchaser } = JSON.parse(body || '{}');
+      const { caseId, syncLimit, extractLimit, tenant, purchaser, pairs } = JSON.parse(body || '{}');
       if (!caseId || !CASE_COMMANDS[caseId]) {
         res.writeHead(400, { 'Content-Type': 'application/json' });
         res.end(JSON.stringify({ error: 'Invalid or missing caseId' }));
@@ -316,8 +320,14 @@ createServer(async (req, res) => {
       const params = {};
       if (syncLimit !== undefined && Number(syncLimit) >= 0) params.syncLimit = Number(syncLimit);
       if (extractLimit !== undefined && Number(extractLimit) >= 0) params.extractLimit = Number(extractLimit);
-      if (tenant && typeof tenant === 'string') params.tenant = tenant.trim();
-      if (purchaser && typeof purchaser === 'string') params.purchaser = purchaser.trim();
+      if (pairs && Array.isArray(pairs) && pairs.length > 0) {
+        params.pairs = pairs.filter((x) => x && typeof x.tenant === 'string' && typeof x.purchaser === 'string');
+        if (params.pairs.length === 0) params.pairs = undefined;
+      }
+      if (!params.pairs) {
+        if (tenant && typeof tenant === 'string') params.tenant = tenant.trim();
+        if (purchaser && typeof purchaser === 'string') params.purchaser = purchaser.trim();
+      }
 
       res.writeHead(200, {
         'Content-Type': 'application/x-ndjson',

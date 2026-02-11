@@ -37,24 +37,55 @@ function filterBucketsForTenantPurchaser(config: Config, tenant?: string, purcha
   return config.s3.buckets.filter((b) => b.tenant === tenant && b.purchaser === purchaser);
 }
 
+type TenantPurchaserPair = { tenant: string; purchaser: string };
+function filterBucketsForPairs(config: Config, pairs: TenantPurchaserPair[]): Config['s3']['buckets'] {
+  if (!pairs || pairs.length === 0) return config.s3.buckets;
+  const set = new Set(pairs.map(({ tenant, purchaser }) => `${tenant}\0${purchaser}`));
+  return config.s3.buckets.filter((b) => b.tenant != null && b.purchaser != null && set.has(`${b.tenant}\0${b.purchaser}`));
+}
+
+function parsePairs(pairsJson: string | undefined): TenantPurchaserPair[] | undefined {
+  if (!pairsJson || typeof pairsJson !== 'string') return undefined;
+  try {
+    const arr = JSON.parse(pairsJson) as unknown;
+    if (!Array.isArray(arr)) return undefined;
+    return arr.filter(
+      (x): x is TenantPurchaserPair =>
+        x != null &&
+        typeof x === 'object' &&
+        typeof (x as TenantPurchaserPair).tenant === 'string' &&
+        typeof (x as TenantPurchaserPair).purchaser === 'string'
+    );
+  } catch {
+    return undefined;
+  }
+}
+
 program
   .command('sync')
   .description('Sync S3 bucket (tenant/purchaser folders) to staging')
   .option('--limit <n>', 'Max number of files to download (0 = no limit). Skipped (unchanged SHA-256) do not count.', Number.parseInt)
   .option('--tenant <name>', 'Sync only this tenant folder (requires --purchaser)')
   .option('--purchaser <name>', 'Sync only this purchaser folder (requires --tenant)')
-  .action(async (cmdOpts: { limit?: number; tenant?: string; purchaser?: string }) => {
+  .option('--pairs <json>', 'JSON array of {tenant, purchaser} to scope (e.g. \'[{"tenant":"a","purchaser":"p"}]\')')
+  .action(async (cmdOpts: { limit?: number; tenant?: string; purchaser?: string; pairs?: string }) => {
     try {
       const opts = program.opts() as { config?: string };
       const config = loadConfig(opts.config ?? getConfigPath());
       const syncLimit =
         cmdOpts.limit === undefined || Number.isNaN(cmdOpts.limit) ? undefined : cmdOpts.limit;
-      const buckets =
-        cmdOpts.tenant && cmdOpts.purchaser
+      const pairs = parsePairs(cmdOpts.pairs);
+      const buckets = pairs && pairs.length > 0
+        ? filterBucketsForPairs(config, pairs)
+        : cmdOpts.tenant && cmdOpts.purchaser
           ? filterBucketsForTenantPurchaser(config, cmdOpts.tenant, cmdOpts.purchaser)
           : undefined;
       if (buckets && buckets.length === 0) {
-        console.error(`No bucket config for tenant "${cmdOpts.tenant}" / purchaser "${cmdOpts.purchaser}".`);
+        if (pairs?.length) {
+          console.error('No bucket config matches the given --pairs.');
+        } else {
+          console.error(`No bucket config for tenant "${cmdOpts.tenant}" / purchaser "${cmdOpts.purchaser}".`);
+        }
         process.exit(1);
       }
       const stdoutPiped = typeof process !== 'undefined' && process.stdout?.isTTY !== true;
@@ -90,7 +121,8 @@ program
   .option('--extract-limit <n>', 'Max files to extract in this run (0 = no limit).', Number.parseInt)
   .option('--tenant <name>', 'Run only for this tenant (requires --purchaser)')
   .option('--purchaser <name>', 'Run only for this purchaser (requires --tenant)')
-  .action(async (opts: { sync: boolean; report: boolean; syncLimit?: number; extractLimit?: number; tenant?: string; purchaser?: string }) => {
+  .option('--pairs <json>', 'JSON array of {tenant, purchaser} to scope (e.g. \'[{"tenant":"a","purchaser":"p"}]\')')
+  .action(async (opts: { sync: boolean; report: boolean; syncLimit?: number; extractLimit?: number; tenant?: string; purchaser?: string; pairs?: string }) => {
     try {
       const globalOpts = program.opts() as { config?: string };
       const config = loadConfig(globalOpts.config ?? getConfigPath());
@@ -100,20 +132,22 @@ program
         opts.syncLimit === undefined || Number.isNaN(opts.syncLimit) ? undefined : opts.syncLimit;
       const extractLimit =
         opts.extractLimit === undefined || Number.isNaN(opts.extractLimit) ? undefined : opts.extractLimit;
-      const tenant = opts.tenant?.trim();
-      const purchaser = opts.purchaser?.trim();
-      if (tenant && !purchaser) {
+      const pairs = parsePairs(opts.pairs);
+      const tenant = !pairs?.length ? opts.tenant?.trim() : undefined;
+      const purchaser = !pairs?.length ? opts.purchaser?.trim() : undefined;
+      if (!pairs?.length && tenant && !purchaser) {
         console.error('--purchaser is required when --tenant is set.');
         process.exit(1);
       }
-      if (purchaser && !tenant) {
+      if (!pairs?.length && purchaser && !tenant) {
         console.error('--tenant is required when --purchaser is set.');
         process.exit(1);
       }
-      if (tenant && purchaser) console.log(`Scoped to tenant: ${tenant}, purchaser: ${purchaser}`);
+      if (pairs?.length) console.log(`Scoped to ${pairs.length} pair(s): ${pairs.map(({ tenant: t, purchaser: p }) => `${t}/${p}`).join(', ')}`);
+      else if (tenant && purchaser) console.log(`Scoped to tenant: ${tenant}, purchaser: ${purchaser}`);
       const result = await (doSync
-        ? runFull({ configPath: globalOpts.config, syncLimit, extractLimit, tenant, purchaser })
-        : runExtractionOnly({ configPath: globalOpts.config, extractLimit, tenant, purchaser }));
+        ? runFull({ configPath: globalOpts.config, syncLimit, extractLimit, tenant, purchaser, pairs })
+        : runExtractionOnly({ configPath: globalOpts.config, extractLimit, tenant, purchaser, pairs }));
       if (doSync && result.syncResults && result.syncResults.length > 0) {
         printSyncResults(result.syncResults, syncLimit);
       }
@@ -121,7 +155,7 @@ program
         console.log('All files in the stage are extracted. Please sync new files.');
       }
       if (result.metrics.success > 0) {
-        const extractionsDir = `${dirname(config.report.outputDir)}/extractions/${result.run.runId}`;
+        const extractionsDir = `${dirname(config.report.outputDir)}/extractions`;
         console.log(`Extraction result(s): ${extractionsDir} (full API response JSON per file)`);
       }
       console.log(`Extraction metrics: success=${result.metrics.success}, failed=${result.metrics.failed}, skipped=${result.metrics.skipped}`);
@@ -143,25 +177,28 @@ program
   .option('--limit <n>', 'Max number of files to sync (and extract). Each synced file is extracted automatically.', Number.parseInt)
   .option('--tenant <name>', 'Sync/extract only for this tenant (requires --purchaser)')
   .option('--purchaser <name>', 'Sync/extract only for this purchaser (requires --tenant)')
+  .option('--pairs <json>', 'JSON array of {tenant, purchaser} to scope')
   .option('--no-report', 'Do not write report after run')
-  .action(async (cmdOpts: { limit?: number; tenant?: string; purchaser?: string; report?: boolean }) => {
+  .action(async (cmdOpts: { limit?: number; tenant?: string; purchaser?: string; pairs?: string; report?: boolean }) => {
     try {
       const globalOpts = program.opts() as { config?: string };
       const config = loadConfig(globalOpts.config ?? getConfigPath());
       const doReport = cmdOpts.report === true || cmdOpts.report === undefined;
       const limit =
         cmdOpts.limit === undefined || Number.isNaN(cmdOpts.limit) ? undefined : cmdOpts.limit;
-      const tenant = cmdOpts.tenant?.trim();
-      const purchaser = cmdOpts.purchaser?.trim();
-      if (tenant && !purchaser) {
+      const pairs = parsePairs(cmdOpts.pairs);
+      const tenant = !pairs?.length ? cmdOpts.tenant?.trim() : undefined;
+      const purchaser = !pairs?.length ? cmdOpts.purchaser?.trim() : undefined;
+      if (!pairs?.length && tenant && !purchaser) {
         console.error('--purchaser is required when --tenant is set.');
         process.exit(1);
       }
-      if (purchaser && !tenant) {
+      if (!pairs?.length && purchaser && !tenant) {
         console.error('--tenant is required when --purchaser is set.');
         process.exit(1);
       }
-      if (tenant && purchaser) console.log(`Scoped to tenant: ${tenant}, purchaser: ${purchaser}`);
+      if (pairs?.length) console.log(`Scoped to ${pairs.length} pair(s): ${pairs.map(({ tenant: t, purchaser: p }) => `${t}/${p}`).join(', ')}`);
+      else if (tenant && purchaser) console.log(`Scoped to tenant: ${tenant}, purchaser: ${purchaser}`);
       const stdoutPiped = typeof process !== 'undefined' && process.stdout?.isTTY !== true;
       const limitNum = limit !== undefined && limit > 0 ? limit : 0;
       if (stdoutPiped && limitNum > 0) process.stdout.write(`SYNC_PROGRESS\t0\t${limitNum}\n`);
@@ -170,6 +207,7 @@ program
         limit,
         tenant,
         purchaser,
+        pairs,
         onProgress:
           stdoutPiped && limitNum > 0
             ? (done, total) => {
@@ -189,7 +227,7 @@ program
         console.log('All files in the stage are extracted. Please sync new files.');
       }
       if (result.metrics.success > 0) {
-        const extractionsDir = `${dirname(config.report.outputDir)}/extractions/${result.run.runId}`;
+        const extractionsDir = `${dirname(config.report.outputDir)}/extractions`;
         console.log(`Extraction result(s): ${extractionsDir} (full API response JSON per file)`);
       }
       console.log(`Extraction metrics: success=${result.metrics.success}, failed=${result.metrics.failed}, skipped=${result.metrics.skipped}`);

@@ -61,7 +61,7 @@ function writeExtractionResult(
   responseBody: string
 ): string | null {
   try {
-    const baseDir = join(dirname(config.report.outputDir), 'extractions', runId);
+    const baseDir = join(dirname(config.report.outputDir), 'extractions');
     let data: unknown;
     try {
       data = JSON.parse(responseBody) as unknown;
@@ -168,22 +168,28 @@ export async function extractOneFile(
  * @param options.extractLimit - Max number of files to process (0 = no limit). Overrides config when set from CLI.
  * @param options.tenant - When set with purchaser, only process files for this tenant/purchaser.
  * @param options.purchaser - When set with tenant, only process files for this tenant/purchaser.
+ * @param options.pairs - When set, only process files for these (tenant, purchaser) pairs.
  */
 export async function runExtraction(
   config: Config,
-  options?: { extractLimit?: number; tenant?: string; purchaser?: string }
+  options?: { extractLimit?: number; tenant?: string; purchaser?: string; pairs?: { tenant: string; purchaser: string }[] }
 ): Promise<LoadEngineResult> {
   const db = openCheckpointDb(config.run.checkpointPath);
   const runId = getOrCreateRunId(db);
   const completed = config.run.skipCompleted ? getCompletedPaths(db, runId) : new Set<string>();
   initRequestResponseLogger(config, runId);
 
-  const buckets =
-    options?.tenant && options?.purchaser
-      ? config.s3.buckets.filter(
-          (b) => b.tenant === options.tenant && b.purchaser === options.purchaser
-        )
-      : config.s3.buckets;
+  let buckets = config.s3.buckets;
+  if (options?.pairs && options.pairs.length > 0) {
+    const set = new Set(options.pairs.map(({ tenant, purchaser }) => `${tenant}\0${purchaser}`));
+    buckets = buckets.filter(
+      (b) => b.tenant != null && b.purchaser != null && set.has(`${b.tenant}\0${b.purchaser}`)
+    );
+  } else if (options?.tenant && options?.purchaser) {
+    buckets = buckets.filter(
+      (b) => b.tenant === options.tenant && b.purchaser === options.purchaser
+    );
+  }
   const jobs = discoverStagingFiles(config.s3.stagingDir, buckets);
   let toProcess = jobs.filter((j) => !completed.has(j.filePath));
   const extractLimit = options?.extractLimit;

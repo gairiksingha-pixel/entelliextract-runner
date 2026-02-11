@@ -16,6 +16,11 @@ import { initRequestResponseLogger, closeRequestResponseLogger } from './logger.
 import { computeMetrics } from './metrics.js';
 import type { Config, RunMetrics } from './types.js';
 
+export interface TenantPurchaserPair {
+  tenant: string;
+  purchaser: string;
+}
+
 export interface RunOptions {
   configPath?: string;
   skipSync?: boolean;
@@ -27,6 +32,8 @@ export interface RunOptions {
   tenant?: string;
   /** Sync/run only for this purchaser (requires tenant). */
   purchaser?: string;
+  /** Sync/run only for these (tenant, purchaser) pairs. When set, overrides single tenant/purchaser. */
+  pairs?: TenantPurchaserPair[];
 }
 
 /** Single limit for pipeline mode: sync up to N files and extract each as it is synced (in background). */
@@ -55,15 +62,28 @@ function filterBucketsByTenantPurchaser(
   return buckets.filter((b) => b.tenant === tenant && b.purchaser === purchaser);
 }
 
+function filterBucketsByPairs(
+  buckets: Config['s3']['buckets'],
+  pairs: { tenant: string; purchaser: string }[]
+): Config['s3']['buckets'] {
+  if (!pairs || pairs.length === 0) return buckets;
+  const set = new Set(pairs.map(({ tenant, purchaser }) => `${tenant}\0${purchaser}`));
+  return buckets.filter(
+    (b) => b.tenant != null && b.purchaser != null && set.has(`${b.tenant}\0${b.purchaser}`)
+  );
+}
+
 /**
  * Sync S3, run extraction with checkpointing, and compute metrics.
  */
 export async function runFull(options: RunOptions = {}): Promise<FullRunResult> {
   const config = loadConfig(options.configPath);
   const bucketsFilter =
-    options.tenant && options.purchaser
-      ? filterBucketsByTenantPurchaser(config.s3.buckets, options.tenant, options.purchaser)
-      : undefined;
+    options.pairs && options.pairs.length > 0
+      ? filterBucketsByPairs(config.s3.buckets, options.pairs)
+      : options.tenant && options.purchaser
+        ? filterBucketsByTenantPurchaser(config.s3.buckets, options.tenant, options.purchaser)
+        : undefined;
 
   let syncResults: SyncResult[] | undefined;
   if (!options.skipSync) {
@@ -77,6 +97,7 @@ export async function runFull(options: RunOptions = {}): Promise<FullRunResult> 
     extractLimit: options.extractLimit,
     tenant: options.tenant,
     purchaser: options.purchaser,
+    pairs: options.pairs,
   });
   const metrics = computeMetrics(
     runResult.runId,
@@ -108,9 +129,11 @@ export async function runExtractionOnly(options: RunOptions = {}): Promise<FullR
 export async function runSyncExtractPipeline(options: PipelineOptions = {}): Promise<FullRunResult> {
   const config = loadConfig(options.configPath);
   const bucketsFilter =
-    options.tenant && options.purchaser
-      ? filterBucketsByTenantPurchaser(config.s3.buckets, options.tenant, options.purchaser)
-      : undefined;
+    options.pairs && options.pairs.length > 0
+      ? filterBucketsByPairs(config.s3.buckets, options.pairs)
+      : options.tenant && options.purchaser
+        ? filterBucketsByTenantPurchaser(config.s3.buckets, options.tenant, options.purchaser)
+        : undefined;
 
   const limit = options.limit;
   const effectiveSyncLimit =

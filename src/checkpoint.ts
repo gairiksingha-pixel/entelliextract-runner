@@ -94,13 +94,25 @@ export function openCheckpointDb(checkpointPath: string): CheckpointDb {
   return { _path: path, _data };
 }
 
+/** Format run ID as human-readable date and time (e.g. run_2025-02-11_14-30-52). */
+function formatRunId(date: Date): string {
+  const y = date.getFullYear();
+  const m = String(date.getMonth() + 1).padStart(2, '0');
+  const d = String(date.getDate()).padStart(2, '0');
+  const h = String(date.getHours()).padStart(2, '0');
+  const min = String(date.getMinutes()).padStart(2, '0');
+  const s = String(date.getSeconds()).padStart(2, '0');
+  const suffix = Math.random().toString(36).slice(2, 4);
+  return `run_${y}-${m}-${d}_${h}-${min}-${s}_${suffix}`;
+}
+
 /** Generate a new run ID without persisting it (for "no work" runs so we don't overwrite the current run). */
 export function createRunIdOnly(): string {
-  return `run_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`;
+  return formatRunId(new Date());
 }
 
 export function startRun(db: CheckpointDb): string {
-  const runId = createRunIdOnly();
+  const runId = formatRunId(new Date());
   db._data.run_meta[RUN_ID_KEY] = runId;
   saveStore(db);
   return runId;

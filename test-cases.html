@@ -146,6 +146,89 @@
         cursor: not-allowed;
         background: var(--row-alt);
       }
+      .filter-dropdown {
+        position: relative;
+        width: 176px;
+        min-width: 176px;
+      }
+      .filter-dropdown-trigger {
+        width: 100%;
+        height: 36px;
+        padding: 0.5rem 2rem 0.5rem 0.6rem;
+        border: 1px solid var(--border);
+        border-radius: var(--radius-sm);
+        background: var(--surface);
+        color: var(--text);
+        font-size: 0.875rem;
+        font-family: inherit;
+        text-align: left;
+        cursor: pointer;
+        box-sizing: border-box;
+        box-shadow: var(--shadow-inset);
+        background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='%23505050' d='M2.5 4.5L6 8l3.5-3.5H2.5z'/%3E%3C/svg%3E");
+        background-repeat: no-repeat;
+        background-position: right 0.5rem center;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+      .filter-dropdown-trigger:hover {
+        border-color: var(--border-light);
+      }
+      .filter-dropdown-panel {
+        display: none;
+        position: absolute;
+        top: 100%;
+        left: 0;
+        margin-top: 2px;
+        min-width: 100%;
+        max-height: 220px;
+        overflow-y: auto;
+        border: 1px solid var(--border);
+        border-radius: var(--radius-sm);
+        background: var(--surface);
+        box-shadow: var(--shadow-md);
+        z-index: 100;
+        padding: 0.35rem 0;
+      }
+      .filter-dropdown-panel.open {
+        display: block;
+      }
+      .filter-dropdown-option {
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+        padding: 0.4rem 0.6rem;
+        font-size: 0.875rem;
+        cursor: pointer;
+        white-space: nowrap;
+      }
+      .filter-dropdown-option:hover {
+        background: var(--row-alt);
+      }
+      .filter-dropdown-option input {
+        margin: 0;
+        cursor: pointer;
+      }
+      .header-filter-reset-wrap {
+        align-self: flex-end;
+      }
+      .header-btn-reset {
+        height: 36px;
+        padding: 0 1rem;
+        border: 1px solid var(--border);
+        border-radius: var(--radius-sm);
+        background: var(--surface);
+        color: var(--text);
+        font-size: 0.875rem;
+        font-family: inherit;
+        cursor: pointer;
+        box-shadow: var(--shadow-inset);
+      }
+      .header-btn-reset:hover {
+        background: var(--row-alt);
+        border-color: var(--border-light);
+      }
       .main {
         flex: 1;
         display: flex;
@@ -567,26 +650,30 @@
         >
         <div class="header-right">
           <div class="header-field-wrap">
-            <label class="header-label" for="tenant-select">Brand</label>
-            <select id="tenant-select" class="header-select" title="Select brand">
-              <option value="">Select</option>
-              <option value="all">All</option>
-              <option value="no-cow-026090539970-prod">no-cow-026090539970-prod</option>
-              <option value="sundia-026090539970-prod">sundia-026090539970-prod</option>
-              <option value="tractor-beverage-026090539970-prod">tractor-beverage-026090539970-prod</option>
-            </select>
+            <label class="header-label" for="brand-dropdown-trigger">Brand</label>
+            <div id="brand-dropdown" class="filter-dropdown">
+              <button type="button" id="brand-dropdown-trigger" class="filter-dropdown-trigger" aria-haspopup="listbox" aria-expanded="false" title="Select one or more brands">Select brand</button>
+              <div id="brand-dropdown-panel" class="filter-dropdown-panel" role="listbox">
+                <label class="filter-dropdown-option"><input type="checkbox" value="no-cow-026090539970-prod"> no-cow-026090539970-prod</label>
+                <label class="filter-dropdown-option"><input type="checkbox" value="sundia-026090539970-prod"> sundia-026090539970-prod</label>
+                <label class="filter-dropdown-option"><input type="checkbox" value="tractor-beverage-026090539970-prod"> tractor-beverage-026090539970-prod</label>
+              </div>
+            </div>
             <div id="brand-error" class="header-field-error" role="alert"></div>
           </div>
           <div class="header-field-wrap">
-            <label class="header-label" for="purchaser-select">Purchaser</label>
-            <select id="purchaser-select" class="header-select" title="Select purchaser (filtered by brand)">
-              <option value="">Select</option>
-              <option value="all">All</option>
-              <option value="DOT_FOODS">DOT_FOODS</option>
-              <option value="KEHE">KEHE</option>
-              <option value="UNFI">UNFI</option>
-            </select>
+            <label class="header-label" for="purchaser-dropdown-trigger">Purchaser</label>
+            <div id="purchaser-dropdown" class="filter-dropdown">
+              <button type="button" id="purchaser-dropdown-trigger" class="filter-dropdown-trigger" aria-haspopup="listbox" aria-expanded="false" title="Select one or more purchasers">Select purchaser</button>
+              <div id="purchaser-dropdown-panel" class="filter-dropdown-panel" role="listbox">
+                <!-- options filled by JS based on selected brands -->
+              </div>
+            </div>
             <div id="purchaser-error" class="header-field-error" role="alert"></div>
+          </div>
+          <div class="header-field-wrap header-filter-reset-wrap">
+            <label class="header-label" style="visibility: hidden">Reset</label>
+            <button type="button" id="filter-reset-btn" class="header-btn-reset" title="Clear brand and purchaser filter">Reset filter</button>
           </div>
         </div>
       </div>
@@ -664,7 +751,7 @@
         resultDiv.className = "result result-placeholder";
         resultDiv.id = "result-" + c.id;
         resultDiv.innerHTML =
-          '<span class="result-placeholder-text">Select Brand and Purchaser above, then click Execute. Leave as All to run for all.</span>';
+          '<span class="result-placeholder-text">Select one or more brands and purchasers above (or leave empty for all), then click Run.</span>';
         resultCell.appendChild(resultDiv);
         const btn = document.createElement("button");
         btn.type = "button";
@@ -881,7 +968,7 @@
         if (!resultDiv) return;
         var clearLimits = !options || options.clearLimits !== false;
         resultDiv.innerHTML =
-          '<span class="result-placeholder-text">Select Brand and Purchaser above, then click Execute. Leave as All to run for all.</span>';
+          '<span class="result-placeholder-text">Select one or more brands and purchasers above (or leave empty for all), then click Run.</span>';
         resultDiv.className = "result result-placeholder";
         var row = resultDiv.closest("tr");
         if (row) {
@@ -913,34 +1000,51 @@
         };
       }
 
+      function getSelectedBrands() {
+        var panel = document.getElementById("brand-dropdown-panel");
+        if (!panel) return [];
+        return Array.from(panel.querySelectorAll("input[type=checkbox]:checked")).map(function (cb) { return cb.value; });
+      }
+      function getSelectedPurchasers() {
+        var panel = document.getElementById("purchaser-dropdown-panel");
+        if (!panel) return [];
+        return Array.from(panel.querySelectorAll("input[type=checkbox]:checked")).map(function (cb) { return cb.value; });
+      }
+      function getTenantPurchaserPairs() {
+        var brands = getSelectedBrands();
+        var purchasers = getSelectedPurchasers();
+        if (brands.length === 0 && purchasers.length === 0) return [];
+        if (brands.length === 0) brands = Object.keys(BRAND_PURCHASERS || {});
+        if (purchasers.length === 0) {
+          var set = new Set();
+          brands.forEach(function (b) { (BRAND_PURCHASERS[b] || []).forEach(function (p) { set.add(p); }); });
+          purchasers = Array.from(set);
+        }
+        var pairs = [];
+        brands.forEach(function (tenant) {
+          var allowed = BRAND_PURCHASERS[tenant];
+          if (!allowed) return;
+          purchasers.forEach(function (purchaser) {
+            if (allowed.indexOf(purchaser) !== -1) pairs.push({ tenant: tenant, purchaser: purchaser });
+          });
+        });
+        return pairs;
+      }
       function getTenantPurchaser() {
-        var tenantEl = document.getElementById("tenant-select");
-        var purchaserEl = document.getElementById("purchaser-select");
-        var brandVal = tenantEl && tenantEl.value ? tenantEl.value.trim() : "";
-        var purchaserVal = purchaserEl && purchaserEl.value ? purchaserEl.value.trim() : "";
-        var tenant = (brandVal === "" || brandVal === "all") ? undefined : brandVal;
-        var purchaser = (purchaserVal === "" || purchaserVal === "all") ? undefined : purchaserVal;
-        return { tenant: tenant, purchaser: purchaser };
+        var pairs = getTenantPurchaserPairs();
+        if (pairs.length === 0) return { tenant: undefined, purchaser: undefined, pairs: [] };
+        if (pairs.length === 1) return { tenant: pairs[0].tenant, purchaser: pairs[0].purchaser, pairs: pairs };
+        return { tenant: undefined, purchaser: undefined, pairs: pairs };
       }
 
       async function runCase(caseId, btn, resultDiv) {
-        var brandEl = document.getElementById("tenant-select");
-        var purchaserEl = document.getElementById("purchaser-select");
-        var brandVal = brandEl && brandEl.value ? brandEl.value.trim() : "";
-        var purchaserVal = purchaserEl && purchaserEl.value ? purchaserEl.value.trim() : "";
-        if (brandVal === "") {
-          showBrandError("Please select a brand or All.");
-          if (purchaserVal && purchaserVal !== "all") showPurchaserError("Please select a brand first.");
-          else clearPurchaserError();
+        var pairs = getTenantPurchaserPairs();
+        var brands = getSelectedBrands();
+        var purchasers = getSelectedPurchasers();
+        if (brands.length > 0 && purchasers.length > 0 && pairs.length === 0) {
+          showBrandError("No valid brand/purchaser combination for the selected filters.");
           resultDiv.className = "result result-placeholder";
-          resultDiv.innerHTML = '<span class="result-placeholder-text">Select a brand first, then select a purchaser or All to run.</span>';
-          return;
-        }
-        if (purchaserVal === "") {
-          clearBrandError();
-          showPurchaserError("Please select a purchaser or All.");
-          resultDiv.className = "result result-placeholder";
-          resultDiv.innerHTML = '<span class="result-placeholder-text">Select a brand first, then select a purchaser or All to run.</span>';
+          resultDiv.innerHTML = '<span class="result-placeholder-text">Selected brands and purchasers do not form any valid pair. Use Reset filter and try again.</span>';
           return;
         }
         clearBrandError();
@@ -985,16 +1089,25 @@
           }
         }
         try {
+          var body = {
+            caseId: caseId,
+            syncLimit: params.syncLimit,
+            extractLimit: params.extractLimit,
+          };
+          if (tp.pairs && tp.pairs.length > 0) {
+            body.pairs = tp.pairs;
+            if (tp.pairs.length === 1) {
+              body.tenant = tp.pairs[0].tenant;
+              body.purchaser = tp.pairs[0].purchaser;
+            }
+          } else {
+            body.tenant = tp.tenant;
+            body.purchaser = tp.purchaser;
+          }
           var r = await fetch("/run", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              caseId: caseId,
-              syncLimit: params.syncLimit,
-              extractLimit: params.extractLimit,
-              tenant: tp.tenant,
-              purchaser: tp.purchaser,
-            }),
+            body: JSON.stringify(body),
             signal: controller.signal,
           });
           if (!r.ok || !r.body) {
@@ -1135,23 +1248,52 @@
         "sundia-026090539970-prod": ["DOT_FOODS", "KEHE"],
         "tractor-beverage-026090539970-prod": ["DOT_FOODS"],
       };
+      var ALL_PURCHASERS = ["DOT_FOODS", "KEHE", "UNFI"];
       function refreshPurchaserOptions() {
-        var brandSelect = document.getElementById("tenant-select");
-        var purchaserSelect = document.getElementById("purchaser-select");
-        if (!brandSelect || !purchaserSelect) return;
-        var brand = brandSelect.value;
-        if (brand === "") {
-          purchaserSelect.disabled = true;
-          purchaserSelect.innerHTML = '<option value="">Select</option><option value="all">All</option><option value="DOT_FOODS">DOT_FOODS</option><option value="KEHE">KEHE</option><option value="UNFI">UNFI</option>';
-          purchaserSelect.value = "";
-          return;
+        var panel = document.getElementById("purchaser-dropdown-panel");
+        var trigger = document.getElementById("purchaser-dropdown-trigger");
+        if (!panel || !trigger) return;
+        var brands = getSelectedBrands();
+        var opts = brands.length === 0 ? ALL_PURCHASERS : (function () {
+          var set = new Set();
+          brands.forEach(function (b) { (BRAND_PURCHASERS[b] || []).forEach(function (p) { set.add(p); }); });
+          return Array.from(set).sort();
+        })();
+        var currentChecked = getSelectedPurchasers();
+        panel.innerHTML = opts.map(function (p) {
+          var checked = currentChecked.indexOf(p) !== -1 ? " checked" : "";
+          return "<label class=\"filter-dropdown-option\"><input type=\"checkbox\" value=\"" + p + "\"" + checked + "> " + p + "</label>";
+        }).join("");
+        panel.querySelectorAll("input[type=checkbox]").forEach(function (cb) {
+          cb.addEventListener("change", function () { updateFilterDropdownTrigger("purchaser"); });
+        });
+        updateFilterDropdownTrigger("purchaser");
+      }
+      function updateFilterDropdownTrigger(which) {
+        var trigger = document.getElementById(which === "brand" ? "brand-dropdown-trigger" : "purchaser-dropdown-trigger");
+        var selected = which === "brand" ? getSelectedBrands() : getSelectedPurchasers();
+        if (!trigger) return;
+        var defaultTitle = which === "brand" ? "Select one or more brands" : "Select one or more purchasers";
+        if (selected.length === 0) {
+          trigger.textContent = which === "brand" ? "Select brand" : "Select purchaser";
+          trigger.title = defaultTitle;
+        } else if (selected.length === 1) {
+          trigger.textContent = selected[0];
+          trigger.title = selected[0];
+        } else {
+          trigger.textContent = selected.length + " selected";
+          trigger.title = selected.join(", ");
         }
-        purchaserSelect.disabled = false;
-        var current = purchaserSelect.value;
-        var opts = brand !== "all" ? (BRAND_PURCHASERS[brand] || ["DOT_FOODS", "KEHE", "UNFI"]) : ["DOT_FOODS", "KEHE", "UNFI"];
-        purchaserSelect.innerHTML = '<option value="">Select</option><option value="all">All</option>' + opts.map(function (p) { return '<option value="' + p + '">' + p + '</option>'; }).join("");
-        if (current === "all" || opts.indexOf(current) !== -1) purchaserSelect.value = current;
-        else purchaserSelect.value = "";
+      }
+      function resetFilter() {
+        var brandPanel = document.getElementById("brand-dropdown-panel");
+        var purchaserPanel = document.getElementById("purchaser-dropdown-panel");
+        if (brandPanel) brandPanel.querySelectorAll("input[type=checkbox]").forEach(function (cb) { cb.checked = false; });
+        if (purchaserPanel) purchaserPanel.querySelectorAll("input[type=checkbox]").forEach(function (cb) { cb.checked = false; });
+        updateFilterDropdownTrigger("brand");
+        clearBrandError();
+        clearPurchaserError();
+        refreshPurchaserOptions();
       }
       function showBrandError(msg) {
         var el = document.getElementById("brand-error");
@@ -1170,23 +1312,53 @@
         if (el) el.textContent = "";
       }
       (function () {
-        var brandSelect = document.getElementById("tenant-select");
-        var purchaserSelect = document.getElementById("purchaser-select");
-        if (brandSelect && purchaserSelect) {
-          brandSelect.addEventListener("change", function () {
-            clearBrandError();
-            clearPurchaserError();
-            refreshPurchaserOptions();
-          });
-          purchaserSelect.addEventListener("change", function () {
-            if (purchaserSelect.value && purchaserSelect.value !== "all" && (!brandSelect.value || brandSelect.value === "")) {
-              showPurchaserError("Please select a brand first.");
-            } else {
-              clearPurchaserError();
-            }
-          });
-          refreshPurchaserOptions();
+        var brandTrigger = document.getElementById("brand-dropdown-trigger");
+        var brandPanel = document.getElementById("brand-dropdown-panel");
+        var brandDropdown = document.getElementById("brand-dropdown");
+        var purchaserTrigger = document.getElementById("purchaser-dropdown-trigger");
+        var purchaserPanel = document.getElementById("purchaser-dropdown-panel");
+        var purchaserDropdown = document.getElementById("purchaser-dropdown");
+        var resetBtn = document.getElementById("filter-reset-btn");
+
+        function closeAllDropdowns() {
+          if (brandPanel) brandPanel.classList.remove("open");
+          if (purchaserPanel) purchaserPanel.classList.remove("open");
+          if (brandTrigger) brandTrigger.setAttribute("aria-expanded", "false");
+          if (purchaserTrigger) purchaserTrigger.setAttribute("aria-expanded", "false");
         }
+        function toggleDropdown(panel, trigger) {
+          var isOpen = panel && panel.classList.contains("open");
+          closeAllDropdowns();
+          if (!isOpen && panel && trigger) {
+            panel.classList.add("open");
+            trigger.setAttribute("aria-expanded", "true");
+          }
+        }
+        if (brandTrigger && brandPanel) {
+          brandTrigger.addEventListener("click", function (e) {
+            e.stopPropagation();
+            toggleDropdown(brandPanel, brandTrigger);
+          });
+          brandPanel.querySelectorAll("input[type=checkbox]").forEach(function (cb) {
+            cb.addEventListener("change", function () {
+              updateFilterDropdownTrigger("brand");
+              clearBrandError();
+              refreshPurchaserOptions();
+            });
+          });
+        }
+        if (purchaserTrigger && purchaserPanel) {
+          purchaserTrigger.addEventListener("click", function (e) {
+            e.stopPropagation();
+            toggleDropdown(purchaserPanel, purchaserTrigger);
+          });
+        }
+        document.addEventListener("click", function () { closeAllDropdowns(); });
+        if (brandDropdown) brandDropdown.addEventListener("click", function (e) { e.stopPropagation(); });
+        if (purchaserDropdown) purchaserDropdown.addEventListener("click", function (e) { e.stopPropagation(); });
+
+        if (resetBtn) resetBtn.addEventListener("click", function () { resetFilter(); });
+        refreshPurchaserOptions();
       })();
     </script>
   </body>
