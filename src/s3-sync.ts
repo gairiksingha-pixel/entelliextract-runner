@@ -128,6 +128,8 @@ export async function syncBucket(
     initialLimit: number;
     /** When set, called after each file is successfully synced (for pipeline: trigger extraction). */
     onFileSynced?: (job: { filePath: string; relativePath: string; brand: string }) => void;
+    /** When set, called before downloading a file (for resume: persist in-progress path so partial can be removed). */
+    onStartDownload?: (destPath: string, manifestKey: string) => void;
   }
 ): Promise<{ brand: string; stagingPath: string; synced: number; skipped: number; errors: number }> {
   const prefix = bucketConfig.prefix ?? '';
@@ -168,6 +170,7 @@ export async function syncBucket(
     }
 
     try {
+      options.onStartDownload?.(destPath, mk);
       await downloadToFile(client, bucketConfig.bucket, key, destPath);
       const sha = await computeFileSha256(destPath);
       options.manifest[mk] = sha;
@@ -201,6 +204,7 @@ export async function syncAllBuckets(
     buckets?: S3BucketConfig[];
     onProgress?: (done: number, total: number) => void;
     onFileSynced?: (job: { filePath: string; relativePath: string; brand: string }) => void;
+    onStartDownload?: (destPath: string, manifestKey: string) => void;
   }
 ): Promise<SyncResult[]> {
   const client = getS3Client(config.s3.region);
@@ -225,6 +229,7 @@ export async function syncAllBuckets(
       onProgress: overrides?.onProgress,
       initialLimit,
       onFileSynced: overrides?.onFileSynced,
+      onStartDownload: overrides?.onStartDownload,
     });
     results.push(result);
   }

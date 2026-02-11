@@ -11,7 +11,8 @@ import {
   type FileJob,
   type LoadEngineResult,
 } from './load-engine.js';
-import { openCheckpointDb, getOrCreateRunId, getRecordsForRun, closeCheckpointDb } from './checkpoint.js';
+import { openCheckpointDb, getOrCreateRunId, getCurrentRunId, startRun, getRecordsForRun, closeCheckpointDb } from './checkpoint.js';
+import { saveResumeState, clearResumeState } from './resume-state.js';
 import { initRequestResponseLogger, closeRequestResponseLogger } from './logger.js';
 import { computeMetrics } from './metrics.js';
 import type { Config, RunMetrics } from './types.js';
@@ -40,6 +41,8 @@ export interface RunOptions {
 export interface PipelineOptions extends RunOptions {
   /** Max files to sync; each synced file is extracted immediately in background. */
   limit?: number;
+  /** When true, use existing run ID and clear any partial file from previous run before continuing. */
+  resume?: boolean;
   /** Optional progress callback for sync phase (done, total). */
   onProgress?: (done: number, total: number) => void;
   /** Optional progress callback for extraction phase (done, total). Total is the number of files queued for extraction. */
@@ -140,7 +143,9 @@ export async function runSyncExtractPipeline(options: PipelineOptions = {}): Pro
     limit !== undefined && limit > 0 ? limit : undefined;
 
   const db = openCheckpointDb(config.run.checkpointPath);
-  const runId = getOrCreateRunId(db);
+  const runId = options.resume
+    ? (getCurrentRunId(db) ?? startRun(db))
+    : startRun(db);
   initRequestResponseLogger(config, runId);
 
   const concurrency = config.run.concurrency;
@@ -152,6 +157,7 @@ export async function runSyncExtractPipeline(options: PipelineOptions = {}): Pro
   let extractionDone = 0;
 
   const onFileSynced = (job: FileJob) => {
+    clearResumeState(config);
     extractionQueued++;
     extractionQueue.add(() =>
       extractOneFile(config, runId, db, job).finally(() => {
@@ -166,6 +172,9 @@ export async function runSyncExtractPipeline(options: PipelineOptions = {}): Pro
     buckets: bucketsFilter,
     onProgress: options.onProgress,
     onFileSynced,
+    onStartDownload: (destPath, manifestKey) => {
+      saveResumeState(config, { syncInProgressPath: destPath, syncInProgressManifestKey: manifestKey });
+    },
   });
 
   await extractionQueue.onIdle();

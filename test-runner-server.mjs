@@ -115,8 +115,9 @@ function runArgs(p, extra = []) {
   addPairArgs(base, p);
   return ['node', base, { cwd: ROOT }];
 }
-function pipelineArgs(p) {
+function pipelineArgs(p, opts = {}) {
   const base = ['dist/index.js', 'sync-extract'];
+  if (opts.resume) base.push('--resume');
   const limit = p?.syncLimit !== undefined && Number(p.syncLimit) >= 0 ? Number(p.syncLimit) : 0;
   base.push('--limit', String(limit));
   addPairArgs(base, p);
@@ -126,7 +127,7 @@ function pipelineArgs(p) {
 const CASE_COMMANDS = {
   P1: (p) => syncArgs(p),
   P2: (p) => runArgs(p, ['--no-sync']),
-  PIPE: (p) => pipelineArgs(p),
+  PIPE: (p, opts) => pipelineArgs(p, opts || {}),
   P3: () => ['node', ['dist/index.js', 'report'], { cwd: ROOT }],
   P4: (p) => {
     const base = ['dist/index.js', 'sync', '-c', 'config/config.yaml'];
@@ -169,10 +170,10 @@ const PROGRESS_REGEX = /(\d+)%\s*\((\d+)\/(\d+)\)/g;
 const SYNC_PROGRESS_PREFIX = 'SYNC_PROGRESS\t';
 const EXTRACTION_PROGRESS_PREFIX = 'EXTRACTION_PROGRESS\t';
 
-function runCase(caseId, params = {}, callbacks = null) {
+function runCase(caseId, params = {}, callbacks = null, runOpts = null) {
   const def = CASE_COMMANDS[caseId];
   if (!def) return Promise.reject(new Error(`Unknown case: ${caseId}`));
-  const resolved = typeof def === 'function' ? def(params) : def();
+  const resolved = typeof def === 'function' ? def(params, runOpts) : def();
   const [cmd, args, opts] = resolved;
   const displayCmd = args ? [cmd, ...args].join(' ') : cmd;
   const onProgress = callbacks?.onProgress ?? (typeof callbacks === 'function' ? callbacks : null);
@@ -311,7 +312,7 @@ createServer(async (req, res) => {
     let body = '';
     for await (const chunk of req) body += chunk;
     try {
-      const { caseId, syncLimit, extractLimit, tenant, purchaser, pairs } = JSON.parse(body || '{}');
+      const { caseId, syncLimit, extractLimit, tenant, purchaser, pairs, resume, lastSyncDone, lastExtractDone } = JSON.parse(body || '{}');
       if (!caseId || !CASE_COMMANDS[caseId]) {
         res.writeHead(400, { 'Content-Type': 'application/json' });
         res.end(JSON.stringify({ error: 'Invalid or missing caseId' }));
@@ -328,6 +329,7 @@ createServer(async (req, res) => {
         if (tenant && typeof tenant === 'string') params.tenant = tenant.trim();
         if (purchaser && typeof purchaser === 'string') params.purchaser = purchaser.trim();
       }
+      const runOpts = (resume === true) ? { resume: true, lastSyncDone, lastExtractDone } : null;
 
       res.writeHead(200, {
         'Content-Type': 'application/x-ndjson',
@@ -356,7 +358,7 @@ createServer(async (req, res) => {
         onExtractionProgress: (done, total) => {
           writeLine({ type: 'extraction_progress', done, total });
         },
-      });
+      }, runOpts);
       currentChild = null;
       writeLine({ type: 'result', ...result });
       res.end();

@@ -11,6 +11,7 @@ import { runFull, runExtractionOnly, runSyncExtractPipeline } from './runner.js'
 import type { Config } from './types.js';
 import { buildSummary, writeReports } from './report.js';
 import { openCheckpointDb, getRecordsForRun, closeCheckpointDb } from './checkpoint.js';
+import { clearPartialFileAndResumeState } from './resume-state.js';
 import { computeMetrics } from './metrics.js';
 import { writeFileSync, readFileSync, existsSync } from 'node:fs';
 import { dirname } from 'node:path';
@@ -175,11 +176,12 @@ program
   .command('sync-extract')
   .description('Pipeline: sync up to N files; as each file is synced, extract it in the background. One count for both sync and extract.')
   .option('--limit <n>', 'Max number of files to sync (and extract). Each synced file is extracted automatically.', Number.parseInt)
+  .option('--resume', 'Resume from last run: remove partial file (if any) and continue with same run ID')
   .option('--tenant <name>', 'Sync/extract only for this tenant (requires --purchaser)')
   .option('--purchaser <name>', 'Sync/extract only for this purchaser (requires --tenant)')
   .option('--pairs <json>', 'JSON array of {tenant, purchaser} to scope')
   .option('--no-report', 'Do not write report after run')
-  .action(async (cmdOpts: { limit?: number; tenant?: string; purchaser?: string; pairs?: string; report?: boolean }) => {
+  .action(async (cmdOpts: { limit?: number; resume?: boolean; tenant?: string; purchaser?: string; pairs?: string; report?: boolean }) => {
     try {
       const globalOpts = program.opts() as { config?: string };
       const config = loadConfig(globalOpts.config ?? getConfigPath());
@@ -199,12 +201,19 @@ program
       }
       if (pairs?.length) console.log(`Scoped to ${pairs.length} pair(s): ${pairs.map(({ tenant: t, purchaser: p }) => `${t}/${p}`).join(', ')}`);
       else if (tenant && purchaser) console.log(`Scoped to tenant: ${tenant}, purchaser: ${purchaser}`);
+      if (cmdOpts.resume) {
+        clearPartialFileAndResumeState(config);
+        console.log('Resume: cleared partial file (if any). Continuing with same run.');
+      } else {
+        clearPartialFileAndResumeState(config);
+      }
       const stdoutPiped = typeof process !== 'undefined' && process.stdout?.isTTY !== true;
       const limitNum = limit !== undefined && limit > 0 ? limit : 0;
       if (stdoutPiped && limitNum > 0) process.stdout.write(`SYNC_PROGRESS\t0\t${limitNum}\n`);
       const result = await runSyncExtractPipeline({
         configPath: globalOpts.config,
         limit,
+        resume: cmdOpts.resume === true,
         tenant,
         purchaser,
         pairs,

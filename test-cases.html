@@ -71,9 +71,16 @@
       .header-right {
         margin-left: auto;
         display: flex;
-        align-items: center;
-        gap: 1rem;
+        flex-direction: column;
+        align-items: flex-end;
+        gap: 0;
         flex-shrink: 0;
+      }
+      .header-filter-row {
+        display: flex;
+        align-items: flex-start;
+        gap: 1rem;
+        flex-wrap: wrap;
       }
       .header-field-wrap {
         display: grid;
@@ -442,6 +449,26 @@
         border-color: #a00;
         color: #fff;
       }
+      button.reset-case.resume-btn {
+        background: var(--accent-light);
+        border-color: var(--accent);
+        color: var(--accent);
+      }
+      button.reset-case.resume-btn:hover {
+        background: var(--accent);
+        color: #fff;
+      }
+      button.reset-during-resume {
+        display: none !important;
+      }
+      button.reset-during-resume.show-during-resume {
+        display: block !important;
+        width: 100%;
+        min-height: 2.75rem;
+        box-sizing: border-box;
+        padding: 0.65rem 1.25rem;
+        font-size: 0.9rem;
+      }
       button.download-sync-report-btn,
       button.download-report-btn {
         border: none;
@@ -569,6 +596,15 @@
         font-size: 0.85rem;
         font-style: italic;
       }
+      .result.result-validation-alert .result-placeholder-text {
+        color: var(--fail);
+        font-style: normal;
+        padding: 0.5rem 0.75rem;
+        background: var(--fail-bg);
+        border: 1px solid rgba(198, 40, 40, 0.25);
+        border-radius: var(--radius-sm);
+        display: inline-block;
+      }
       .result .exit {
         font-weight: 600;
         margin-bottom: 0.2rem;
@@ -649,31 +685,33 @@
           >intellirevenue</span
         >
         <div class="header-right">
-          <div class="header-field-wrap">
-            <label class="header-label" for="brand-dropdown-trigger">Brand</label>
-            <div id="brand-dropdown" class="filter-dropdown">
-              <button type="button" id="brand-dropdown-trigger" class="filter-dropdown-trigger" aria-haspopup="listbox" aria-expanded="false" title="Select one or more brands">Select brand</button>
-              <div id="brand-dropdown-panel" class="filter-dropdown-panel" role="listbox">
-                <label class="filter-dropdown-option"><input type="checkbox" value="no-cow-026090539970-prod"> no-cow-026090539970-prod</label>
-                <label class="filter-dropdown-option"><input type="checkbox" value="sundia-026090539970-prod"> sundia-026090539970-prod</label>
-                <label class="filter-dropdown-option"><input type="checkbox" value="tractor-beverage-026090539970-prod"> tractor-beverage-026090539970-prod</label>
+          <div class="header-filter-row">
+            <div class="header-field-wrap">
+              <label class="header-label" for="brand-dropdown-trigger">Brand</label>
+              <div id="brand-dropdown" class="filter-dropdown">
+                <button type="button" id="brand-dropdown-trigger" class="filter-dropdown-trigger" aria-haspopup="listbox" aria-expanded="false" title="Select one or more brands">Select brand</button>
+                <div id="brand-dropdown-panel" class="filter-dropdown-panel" role="listbox">
+                  <label class="filter-dropdown-option"><input type="checkbox" value="no-cow-026090539970-prod"> no-cow-026090539970-prod</label>
+                  <label class="filter-dropdown-option"><input type="checkbox" value="sundia-026090539970-prod"> sundia-026090539970-prod</label>
+                  <label class="filter-dropdown-option"><input type="checkbox" value="tractor-beverage-026090539970-prod"> tractor-beverage-026090539970-prod</label>
+                </div>
               </div>
+              <div id="brand-error" class="header-field-error" role="alert"></div>
             </div>
-            <div id="brand-error" class="header-field-error" role="alert"></div>
-          </div>
-          <div class="header-field-wrap">
-            <label class="header-label" for="purchaser-dropdown-trigger">Purchaser</label>
-            <div id="purchaser-dropdown" class="filter-dropdown">
-              <button type="button" id="purchaser-dropdown-trigger" class="filter-dropdown-trigger" aria-haspopup="listbox" aria-expanded="false" title="Select one or more purchasers">Select purchaser</button>
-              <div id="purchaser-dropdown-panel" class="filter-dropdown-panel" role="listbox">
-                <!-- options filled by JS based on selected brands -->
+            <div class="header-field-wrap">
+              <label class="header-label" for="purchaser-dropdown-trigger">Purchaser</label>
+              <div id="purchaser-dropdown" class="filter-dropdown">
+                <button type="button" id="purchaser-dropdown-trigger" class="filter-dropdown-trigger" aria-haspopup="listbox" aria-expanded="false" title="Select one or more purchasers">Select purchaser</button>
+                <div id="purchaser-dropdown-panel" class="filter-dropdown-panel" role="listbox">
+                  <!-- options filled by JS based on selected brands -->
+                </div>
               </div>
+              <div id="purchaser-error" class="header-field-error" role="alert"></div>
             </div>
-            <div id="purchaser-error" class="header-field-error" role="alert"></div>
-          </div>
-          <div class="header-field-wrap header-filter-reset-wrap">
-            <label class="header-label" style="visibility: hidden">Reset</label>
-            <button type="button" id="filter-reset-btn" class="header-btn-reset" title="Clear brand and purchaser filter">Reset filter</button>
+            <div class="header-field-wrap header-filter-reset-wrap">
+              <label class="header-label" style="visibility: hidden">Reset</label>
+              <button type="button" id="filter-reset-btn" class="header-btn-reset" title="Clear brand and purchaser filter">Reset filter</button>
+            </div>
           </div>
         </div>
       </div>
@@ -751,14 +789,14 @@
         resultDiv.className = "result result-placeholder";
         resultDiv.id = "result-" + c.id;
         resultDiv.innerHTML =
-          '<span class="result-placeholder-text">Select one or more brands and purchasers above (or leave empty for all), then click Run.</span>';
+          '<span class="result-placeholder-text">Select at least one brand or purchaser in the filter above, then click Run.</span>';
         resultCell.appendChild(resultDiv);
         const btn = document.createElement("button");
         btn.type = "button";
         btn.className = "run";
         btn.textContent = getRunButtonLabel(c.id);
         btn.onclick = function () {
-          runCase(c.id, btn, resultDiv);
+          runCase(c.id, btn, resultDiv, null);
         };
         const resetBtn = document.createElement("button");
         resetBtn.type = "button";
@@ -766,6 +804,20 @@
         resetBtn.textContent = "Reset";
         resetBtn.onclick = function () {
           resetCase(resultDiv);
+        };
+        const resetDuringResumeBtn = document.createElement("button");
+        resetDuringResumeBtn.type = "button";
+        resetDuringResumeBtn.className = "reset-case reset-during-resume";
+        resetDuringResumeBtn.textContent = "Reset";
+        resetDuringResumeBtn.title = "Clear result and exit resume mode";
+        resetDuringResumeBtn.onclick = function () {
+          resetCase(resultDiv);
+          resetDuringResumeBtn.classList.remove("show-during-resume");
+          resetBtn.textContent = "Reset";
+          resetBtn.classList.remove("resume-btn");
+          resetBtn.onclick = function () { resetCase(resultDiv); };
+          if (tr._resumeSync !== undefined) delete tr._resumeSync;
+          if (tr._resumeExtract !== undefined) delete tr._resumeExtract;
         };
         tr.innerHTML =
           '<td class="op-name">' +
@@ -775,6 +827,7 @@
           '<td class="run-cell"><div class="btn-group"><div class="btn-row"></div><div class="btn-row-download"></div></div></td>';
         tr.querySelector(".btn-row").appendChild(btn);
         tr.querySelector(".btn-row").appendChild(resetBtn);
+        tr.querySelector(".btn-row").appendChild(resetDuringResumeBtn);
         const downloadSyncReportBtn = document.createElement("button");
         downloadSyncReportBtn.className = "download-sync-report-btn";
         downloadSyncReportBtn.textContent = "Download Sync Report";
@@ -968,7 +1021,7 @@
         if (!resultDiv) return;
         var clearLimits = !options || options.clearLimits !== false;
         resultDiv.innerHTML =
-          '<span class="result-placeholder-text">Select one or more brands and purchasers above (or leave empty for all), then click Run.</span>';
+          '<span class="result-placeholder-text">Select at least one brand or purchaser in the filter above, then click Run.</span>';
         resultDiv.className = "result result-placeholder";
         var row = resultDiv.closest("tr");
         if (row) {
@@ -1010,6 +1063,9 @@
         if (!panel) return [];
         return Array.from(panel.querySelectorAll("input[type=checkbox]:checked")).map(function (cb) { return cb.value; });
       }
+      function hasFilterSelection() {
+        return getSelectedBrands().length > 0 || getSelectedPurchasers().length > 0;
+      }
       function getTenantPurchaserPairs() {
         var brands = getSelectedBrands();
         var purchasers = getSelectedPurchasers();
@@ -1037,26 +1093,35 @@
         return { tenant: undefined, purchaser: undefined, pairs: pairs };
       }
 
-      async function runCase(caseId, btn, resultDiv) {
+      async function runCase(caseId, btn, resultDiv, runOptions) {
+        var isResume = runOptions && runOptions.resume === true;
+        var row = btn.closest("tr");
+        if (row && isResume) {
+          row._aborted = false;
+        }
+        if (!hasFilterSelection()) {
+          resultDiv.className = "result result-placeholder result-validation-alert";
+          resultDiv.innerHTML = '<span class="result-placeholder-text">Please select at least one brand or purchaser in the filter.</span>';
+          return;
+        }
         var pairs = getTenantPurchaserPairs();
         var brands = getSelectedBrands();
         var purchasers = getSelectedPurchasers();
         if (brands.length > 0 && purchasers.length > 0 && pairs.length === 0) {
-          showBrandError("No valid brand/purchaser combination for the selected filters.");
-          resultDiv.className = "result result-placeholder";
-          resultDiv.innerHTML = '<span class="result-placeholder-text">Selected brands and purchasers do not form any valid pair. Use Reset filter and try again.</span>';
+          resultDiv.className = "result result-placeholder result-validation-alert";
+          resultDiv.innerHTML = '<span class="result-placeholder-text">No valid brand/purchaser combination for the selected filter. Use Reset filter and try again.</span>';
           return;
         }
         clearBrandError();
         clearPurchaserError();
         var tp = getTenantPurchaser();
-        var row = btn.closest("tr");
+        if (!row) row = btn.closest("tr");
         var resetBtn = row ? row.querySelector(".reset-case") : null;
         var controller = new AbortController();
         function restoreResetBtn() {
           if (resetBtn) {
             resetBtn.textContent = "Reset";
-            resetBtn.classList.remove("stop-btn");
+            resetBtn.classList.remove("stop-btn", "resume-btn");
             resetBtn.onclick = function () {
               resetCase(resultDiv);
             };
@@ -1064,6 +1129,7 @@
         }
         if (resetBtn) {
           resetBtn.textContent = "Stop";
+          resetBtn.classList.remove("resume-btn");
           resetBtn.classList.add("stop-btn");
           resetBtn.onclick = function () {
             controller.abort();
@@ -1094,6 +1160,13 @@
             syncLimit: params.syncLimit,
             extractLimit: params.extractLimit,
           };
+          if (isResume) {
+            body.resume = true;
+            if (row && (row._resumeSync != null || row._resumeExtract != null)) {
+              if (row._resumeSync != null) body.lastSyncDone = row._resumeSync.done;
+              if (row._resumeExtract != null) body.lastExtractDone = row._resumeExtract.done;
+            }
+          }
           if (tp.pairs && tp.pairs.length > 0) {
             body.pairs = tp.pairs;
             if (tp.pairs.length === 1) {
@@ -1168,15 +1241,29 @@
           showResult(resultDiv, data, pass, null, null, null, caseId);
           } catch (e) {
           if (e.name === "AbortError") {
-            showResult(
-              resultDiv,
-              { exitCode: 130, stdout: "", stderr: "Stopped by user." },
-              false,
-              null,
-              null,
-              null,
-              caseId,
-            );
+            if (row) {
+              row._aborted = true;
+              row._resumeSync = lastSyncProgress;
+              row._resumeExtract = lastExtractionProgress;
+            }
+            if (resetBtn) {
+              resetBtn.textContent = "Resume";
+              resetBtn.classList.remove("stop-btn");
+              resetBtn.classList.add("resume-btn");
+              resetBtn.onclick = function () {
+                runCase(caseId, btn, resultDiv, { resume: true });
+              };
+            }
+            var resetDuringResumeBtn = row ? row.querySelector(".reset-during-resume") : null;
+            if (resetDuringResumeBtn) resetDuringResumeBtn.classList.add("show-during-resume");
+            var syncDone = lastSyncProgress && lastSyncProgress.done != null ? lastSyncProgress.done : 0;
+            var extDone = lastExtractionProgress && lastExtractionProgress.done != null ? lastExtractionProgress.done : 0;
+            var msg = "Stopped. Click Resume to continue from where you left off.";
+            if (syncDone > 0 || extDone > 0) {
+              msg = "Stopped (sync: " + syncDone + ", extract: " + extDone + "). Click Resume to continue from the next file.";
+            }
+            resultDiv.className = "result result-placeholder";
+            resultDiv.innerHTML = '<span class="result-placeholder-text">' + escapeHtml(msg) + '</span>';
           } else {
             showResult(
               resultDiv,
@@ -1190,13 +1277,29 @@
           }
         } finally {
           btn.disabled = false;
-          restoreResetBtn();
+          if (row && row._aborted) {
+            row._aborted = false;
+          } else {
+            restoreResetBtn();
+            var resetDuringResumeBtn = row ? row.querySelector(".reset-during-resume") : null;
+            if (resetDuringResumeBtn) resetDuringResumeBtn.classList.remove("show-during-resume");
+          }
         }
       }
 
       var tbody = document.getElementById("rows");
       ROWS.forEach(function (c) {
         tbody.appendChild(renderRow(c, "rows"));
+      });
+      document.querySelectorAll(".limit-sync, .limit-extract").forEach(function (input) {
+        input.addEventListener("input", function () {
+          var val = Number(this.value, 10);
+          if (this.value !== "" && !Number.isNaN(val) && val < 0) this.value = "0";
+        });
+        input.addEventListener("change", function () {
+          var val = Number(this.value, 10);
+          if (this.value === "" || Number.isNaN(val) || val < 0) this.value = "0";
+        });
       });
 
       function downloadSyncReport(btn) {
