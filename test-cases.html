@@ -349,9 +349,9 @@
         cursor: not-allowed;
       }
       .op-name {
-        width: 280px;
-        min-width: 280px;
-        max-width: 280px;
+        width: 252px;
+        min-width: 252px;
+        max-width: 252px;
         font-weight: 600;
       }
       thead th.op-name {
@@ -366,9 +366,9 @@
         background: var(--header-bg);
       }
       .limits-col {
-        width: 140px;
-        min-width: 140px;
-        max-width: 140px;
+        width: 149px;
+        min-width: 149px;
+        max-width: 149px;
       }
       .limits-cell {
         font-size: 0.85rem;
@@ -432,9 +432,9 @@
         font-style: italic;
       }
       .run-cell {
-        width: 180px;
-        min-width: 180px;
-        max-width: 180px;
+        width: 189px;
+        min-width: 189px;
+        max-width: 189px;
         text-align: center;
         vertical-align: top;
       }
@@ -589,14 +589,14 @@
         margin: 0;
       }
       .result-header {
-        width: 548px;
-        min-width: 548px;
-        max-width: 548px;
+        width: 558px;
+        min-width: 558px;
+        max-width: 558px;
       }
       .result-cell {
-        width: 548px;
-        min-width: 548px;
-        max-width: 548px;
+        width: 558px;
+        min-width: 558px;
+        max-width: 558px;
         vertical-align: top;
         overflow: hidden;
         position: relative;
@@ -652,6 +652,13 @@
       }
       .result .extraction-progress-wrap {
         margin-top: 0.75rem;
+      }
+      .result .skip-progress-wrap {
+        margin-top: 0.5rem;
+        color: var(--muted);
+      }
+      .result .sync-progress-fill.skip-fill {
+        background: linear-gradient(180deg, #8b9da8 0%, #6b7c85 100%);
       }
       .result .sync-progress-bar {
         width: 100%;
@@ -836,9 +843,9 @@
         }
       })();
       const ROWS = [
-        { id: "P1", scenario: "S3 Sync — Download files to staging", limits: { sync: true, extract: false } },
-        { id: "P2", scenario: "Extract — Run extraction with staging files", limits: { sync: false, extract: true } },
-        { id: "PIPE", scenario: "Sync & Extract (pipeline) — Sync and extract with staging files", limits: { pipeline: true } },
+        { id: "P1", scenario: "S3 Sync — Download files to staging.", limits: { sync: true, extract: false } },
+        { id: "P2", scenario: "Extract — Run extraction with staging files (No S3 sync).", limits: { sync: false, extract: true } },
+        { id: "PIPE", scenario: "Sync & Extract — Sync from S3 and extract in one run.", limits: { pipeline: true } },
       ];
 
       function renderLimitsCell(c) {
@@ -929,7 +936,7 @@
         return div.innerHTML;
       }
 
-      function showResult(div, data, pass, progress, syncProgress, extractionProgress, caseId) {
+      function showResult(div, data, pass, progress, syncProgress, extractionProgress, caseId, resumeSkipProgress) {
         div.style.display = "block";
         var resultClass = "running";
         if (data) resultClass = pass ? "pass" : "fail";
@@ -938,8 +945,17 @@
         if (!data) {
           var label;
           var extra = "";
+          var hasResumeSkip = resumeSkipProgress != null && (resumeSkipProgress.skipped != null || resumeSkipProgress.total != null);
           var hasSync = syncProgress != null && (syncProgress.done != null || syncProgress.total != null);
           var hasExtraction = extractionProgress != null && (extractionProgress.done != null || extractionProgress.total != null);
+          if (hasResumeSkip) {
+            var skipped = Number(resumeSkipProgress.skipped) || 0;
+            var skipTotal = Number(resumeSkipProgress.total) || 0;
+            var skipPct = skipTotal > 0 ? Math.min(100, Math.round((100 * skipped) / skipTotal)) : 100;
+            extra +=
+              '<div class="sync-progress-wrap skip-progress-wrap">Skipping completed files: ' + skipped + " / " + skipTotal + " skipped</div>" +
+              '<div class="sync-progress-bar"><div class="sync-progress-fill skip-fill" style="width:' + skipPct + '%"></div></div>';
+          }
           if (hasSync) {
             var done = Number(syncProgress.done) || 0;
             var total = Number(syncProgress.total) || 0;
@@ -964,8 +980,8 @@
                 ? '<div class="sync-progress-bar"><div class="sync-progress-fill" style="width:' + extPct + '%"></div></div>'
                 : '<div class="sync-progress-bar"><div class="sync-progress-fill sync-progress-indeterminate" style="width:40%"></div></div>');
           }
-          if (hasSync || hasExtraction) {
-            label = hasSync && hasExtraction ? "Sync & extract…" : (hasSync ? "Syncing…" : "Extracting…");
+          if (hasResumeSkip || hasSync || hasExtraction) {
+            label = hasResumeSkip && !hasExtraction ? "Skipping completed files…" : (hasResumeSkip && hasExtraction ? "Skipped, now extracting…" : (hasSync && hasExtraction ? "Sync & extract…" : (hasSync ? "Syncing…" : "Extracting…")));
           } else {
             var pctVal = progress && progress.percent != null ? Number(progress.percent) : null;
             var doneVal = progress && progress.done != null ? Number(progress.done) : null;
@@ -1331,6 +1347,7 @@
           var data = null;
           var lastSyncProgress = null;
           var lastExtractionProgress = null;
+          var lastResumeSkip = null;
           while (true) {
             var chunk = await reader.read();
             if (chunk.done) break;
@@ -1343,13 +1360,16 @@
               try {
                 var msg = JSON.parse(line);
                 if (msg.type === "progress" && msg.percent != null) {
-                  showResult(resultDiv, null, false, { percent: msg.percent, done: msg.done, total: msg.total }, null, null, caseId);
+                  showResult(resultDiv, null, false, { percent: msg.percent, done: msg.done, total: msg.total }, null, null, caseId, lastResumeSkip);
+                } else if (msg.type === "resume_skip") {
+                  lastResumeSkip = { skipped: msg.skipped, total: msg.total };
+                  showResult(resultDiv, null, false, null, lastSyncProgress, lastExtractionProgress, caseId, lastResumeSkip);
                 } else if (msg.type === "sync_progress") {
                   lastSyncProgress = { done: msg.done, total: msg.total };
-                  showResult(resultDiv, null, false, null, lastSyncProgress, lastExtractionProgress, caseId);
+                  showResult(resultDiv, null, false, null, lastSyncProgress, lastExtractionProgress, caseId, lastResumeSkip);
                 } else if (msg.type === "extraction_progress") {
                   lastExtractionProgress = { done: msg.done, total: msg.total };
-                  showResult(resultDiv, null, false, null, lastSyncProgress, lastExtractionProgress, caseId);
+                  showResult(resultDiv, null, false, null, lastSyncProgress, lastExtractionProgress, caseId, lastResumeSkip);
                 } else if (msg.type === "result") {
                   data = msg;
                 } else if (msg.error) {
@@ -1562,6 +1582,36 @@
         });
         updateFilterDropdownTrigger("purchaser");
       }
+      function clearResumeStateFromAllRows() {
+        var tbody = document.getElementById("rows");
+        if (!tbody) return;
+        var rows = tbody.querySelectorAll("tr[data-case-id]");
+        rows.forEach(function (tr) {
+          var runBtn = tr.querySelector("button.run");
+          if (!runBtn || runBtn.textContent !== "Resume") return;
+          var caseId = tr.getAttribute("data-case-id");
+          var resultDiv = document.getElementById("result-" + caseId);
+          runBtn.textContent = getRunButtonLabel(caseId);
+          runBtn.classList.remove("resume-btn");
+          runBtn.onclick = function () { runCase(caseId, runBtn, resultDiv, null); };
+          if (tr._resumeSync !== undefined) delete tr._resumeSync;
+          if (tr._resumeExtract !== undefined) delete tr._resumeExtract;
+          if (tr._resumeSyncLimit !== undefined) delete tr._resumeSyncLimit;
+          if (tr._resumeExtractLimit !== undefined) delete tr._resumeExtractLimit;
+          if (resultDiv) {
+            resultDiv.className = "result result-placeholder";
+            resultDiv.innerHTML = "<span class=\"result-placeholder-text\">Select at least one brand or purchaser in the filter above, then click Run.</span>";
+          }
+          tr.querySelectorAll(".limit-sync, .limit-extract").forEach(function (input) { input.disabled = false; });
+          var resetDuringResumeBtn = tr.querySelector(".reset-during-resume");
+          if (resetDuringResumeBtn) resetDuringResumeBtn.classList.remove("show-during-resume");
+          var resetBtn = tr.querySelector("button.reset-case:not(.reset-during-resume)");
+          if (resetBtn) {
+            resetBtn.textContent = "Reset";
+            resetBtn.onclick = function () { resetCase(resultDiv); };
+          }
+        });
+      }
       function updateFilterDropdownTrigger(which) {
         var trigger = document.getElementById(which === "brand" ? "brand-dropdown-trigger" : "purchaser-dropdown-trigger");
         var selected = which === "brand" ? getSelectedBrands() : getSelectedPurchasers();
@@ -1578,6 +1628,7 @@
           trigger.title = selected.join(", ");
         }
         clearValidationAlertWhenFilterSelected();
+        clearResumeStateFromAllRows();
       }
       function resetFilter() {
         var brandPanel = document.getElementById("brand-dropdown-panel");

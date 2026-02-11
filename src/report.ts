@@ -161,31 +161,13 @@ function sectionForRun(entry: HistoricalRunSummary, isFirst: boolean): string {
   });
   const anomaliesList = m.anomalies.length > 0 ? '<ul>' + anomalyItems.join('') + '</ul>' : '<p>None detected.</p>';
 
-  const succeededResults = entry.extractionResults.filter((e) => e.extractionSuccess);
-  const failedResults = entry.extractionResults.filter((e) => !e.extractionSuccess);
-
-  function accordionHtml(results: ExtractionResultEntry[]): string {
-    return results
-      .map(
-        ({ filename, response }) =>
-          `<details class="extraction-details"><summary class="extraction-summary"><strong>${escapeHtml(filename)}</strong></summary><pre class="extraction-json">${escapeHtml(JSON.stringify(response, null, 2))}</pre></details>`
-      )
-      .join('\n  ');
-  }
-
+  const succeededCount = entry.extractionResults.filter((e) => e.extractionSuccess).length;
+  const failedCount = entry.extractionResults.filter((e) => !e.extractionSuccess).length;
   const extractionSection =
     entry.extractionResults.length > 0
       ? `
-  <h3>Extraction results (API response per file)</h3>
-  <p class="accordion-hint">Click a filename to expand or collapse the JSON.</p>
-  <div class="extraction-tabs">
-    <div class="tab-headers">
-      <button type="button" class="tab-btn active" data-tab="succeeded">Succeeded (${succeededResults.length})</button>
-      <button type="button" class="tab-btn" data-tab="failed">Failed (${failedResults.length})</button>
-    </div>
-    <div class="tab-pane active extraction-accordion" data-tab-pane="succeeded">${accordionHtml(succeededResults)}</div>
-    <div class="tab-pane extraction-accordion" data-tab-pane="failed">${accordionHtml(failedResults)}</div>
-  </div>`
+  <h3>Extraction results</h3>
+  <p class="extraction-note">${succeededCount} succeeded, ${failedCount} failed. Full API response per file is in the <strong>Summary Report (JSON)</strong> and in the <strong>Extraction Results</strong> download</p>`
       : '';
   const b = m.failureBreakdown;
   const failureBreakdownRows = m.failed > 0
@@ -304,23 +286,7 @@ function htmlReportFromHistory(historicalSummaries: HistoricalRunSummary[], gene
     .run-section[open] .run-section-summary::before { transform: rotate(90deg); }
     .run-section-summary:hover { background: #eee; }
     .run-section-body { padding: 0 0.75rem 0.75rem; }
-    .extraction-accordion { margin-top: 0.5rem; }
-    .accordion-hint { color: #666; font-size: 0.85rem; margin-bottom: 0.5rem; }
-    details.extraction-details { margin-bottom: 0.5rem; border: 1px solid #ddd; border-radius: 6px; overflow: hidden; }
-    details.extraction-details[open] { border-color: #216c6d; }
-    summary.extraction-summary { cursor: pointer; padding: 0.6rem 0.75rem; background: #f9f9f9; list-style: none; display: flex; align-items: center; }
-    summary.extraction-summary::-webkit-details-marker { display: none; }
-    summary.extraction-summary::before { content: "▶"; display: inline-block; margin-right: 0.5rem; font-size: 0.65rem; color: #666; transition: transform 0.2s; }
-    details.extraction-details[open] summary.extraction-summary::before { transform: rotate(90deg); }
-    details.extraction-details summary.extraction-summary:hover { background: #eee; }
-    .extraction-json { margin: 0; background: #f8f8f8; padding: 1rem; overflow: auto; font-size: 0.85rem; border-top: 1px solid #ddd; max-height: 400px; }
-    .extraction-tabs { margin-top: 0.5rem; }
-    .tab-headers { display: flex; gap: 0.25rem; margin-bottom: 0.75rem; }
-    .tab-btn { padding: 0.4rem 0.75rem; border: 1px solid #ddd; border-radius: 4px; background: #f5f5f5; cursor: pointer; font-size: 0.9rem; }
-    .tab-btn:hover { background: #eee; }
-    .tab-btn.active { background: #216c6d; color: #fff; border-color: #216c6d; }
-    .tab-pane { display: none; }
-    .tab-pane.active { display: block; }
+    .extraction-note { color: #555; font-size: 0.9rem; margin: 0.5rem 0; }
     td.file-path { word-break: break-all; max-width: 400px; }
   </style>
 </head>
@@ -329,20 +295,6 @@ function htmlReportFromHistory(historicalSummaries: HistoricalRunSummary[], gene
   <p class="meta">Generated: ${escapeHtml(generatedAt)} — ${historicalSummaries.length} run(s) (sync &amp; extract)</p>
   <h2>Historical runs</h2>
   ${runsHtml}
-  <script>
-    document.querySelectorAll('.tab-btn').forEach(function(btn) {
-      btn.addEventListener('click', function() {
-        var tabId = this.getAttribute('data-tab');
-        var runSection = this.closest('.run-section-body');
-        if (!runSection) return;
-        runSection.querySelectorAll('.tab-btn').forEach(function(b) { b.classList.remove('active'); });
-        runSection.querySelectorAll('.tab-pane').forEach(function(p) { p.classList.remove('active'); });
-        this.classList.add('active');
-        var pane = runSection.querySelector('.tab-pane[data-tab-pane="' + tabId + '"]');
-        if (pane) pane.classList.add('active');
-      });
-    });
-  </script>
 </body>
 </html>`;
 }
@@ -396,6 +348,21 @@ function pruneOldReports(outDir: string, retainCount: number): void {
       // ignore delete errors
     }
   }
+}
+
+/**
+ * Write reports for a single run ID (e.g. after each file completes so the summary is up to date).
+ * Reads current checkpoint state, computes metrics, and calls writeReports.
+ */
+export function writeReportsForRunId(config: Config, runId: string): void {
+  const db = openCheckpointDb(config.run.checkpointPath);
+  const records = getRecordsForRun(db, runId);
+  closeCheckpointDb(db);
+  if (records.length === 0) return;
+  const { start, end } = minMaxDatesFromRecords(records);
+  const metrics = computeMetrics(runId, records, start, end);
+  const summary = buildSummary(metrics);
+  writeReports(config, summary);
 }
 
 /**

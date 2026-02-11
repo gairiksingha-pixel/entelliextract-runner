@@ -8,7 +8,7 @@
 import { createServer } from 'node:http';
 import { spawn } from 'node:child_process';
 import { createRequire } from 'node:module';
-import { readFileSync, readdirSync, writeFileSync, existsSync, copyFileSync, statSync, createReadStream } from 'node:fs';
+import { readFileSync, readdirSync, writeFileSync, existsSync, copyFileSync, statSync, createReadStream, mkdirSync } from 'node:fs';
 import { join, dirname, extname, normalize, resolve, relative } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -22,7 +22,65 @@ const REPORTS_DIR = join(ROOT, 'output', 'reports');
 const EXTRACTIONS_DIR = join(ROOT, 'output', 'extractions');
 const STAGING_DIR = join(ROOT, 'output', 'staging');
 const SYNC_MANIFEST_PATH = join(ROOT, 'output', 'checkpoints', 'sync-manifest.json');
+const CHECKPOINT_PATH = join(ROOT, 'output', 'checkpoints', 'checkpoint.db');
+const LAST_RUN_COMPLETED_PATH = join(ROOT, 'output', 'checkpoints', 'last-run-completed.txt');
 const ALLOWED_EXT = new Set(['.html', '.json']);
+
+function getCurrentRunIdFromCheckpoint() {
+  if (!existsSync(CHECKPOINT_PATH)) return null;
+  try {
+    const raw = readFileSync(CHECKPOINT_PATH, 'utf-8');
+    const data = JSON.parse(raw);
+    return data?.run_meta?.current_run_id ?? null;
+  } catch (_) {
+    return null;
+  }
+}
+
+function getLastCompletedRunId() {
+  if (!existsSync(LAST_RUN_COMPLETED_PATH)) return null;
+  try {
+    return readFileSync(LAST_RUN_COMPLETED_PATH, 'utf-8').trim() || null;
+  } catch (_) {
+    return null;
+  }
+}
+
+function markRunCompleted(runId) {
+  if (!runId) return;
+  try {
+    const dir = dirname(LAST_RUN_COMPLETED_PATH);
+    if (!existsSync(dir)) mkdirSync(dir, { recursive: true });
+    writeFileSync(LAST_RUN_COMPLETED_PATH, runId, 'utf-8');
+  } catch (_) {}
+}
+
+function getRunStatusFromCheckpoint() {
+  const runId = getCurrentRunIdFromCheckpoint();
+  if (!runId) return { canResume: false, runId: null, done: 0, failed: 0, total: 0 };
+  const lastCompleted = getLastCompletedRunId();
+  try {
+    const raw = readFileSync(CHECKPOINT_PATH, 'utf-8');
+    const data = JSON.parse(raw);
+    const checkpoints = Array.isArray(data?.checkpoints) ? data.checkpoints : [];
+    const forRun = checkpoints.filter((c) => c.run_id === runId);
+    const done = forRun.filter((c) => c.status === 'done').length;
+    const failed = forRun.filter((c) => c.status === 'error').length;
+    const canResume = forRun.length > 0 && runId !== lastCompleted;
+    return { canResume, runId, done, failed, total: forRun.length };
+  } catch (_) {
+    return { canResume: false, runId: null, done: 0, failed: 0, total: 0 };
+  }
+}
+
+function spawnReportForRunId(runId) {
+  if (!runId) return;
+  return new Promise((resolve) => {
+    const child = spawn('node', ['dist/index.js', 'report', '--run-id', runId], { cwd: ROOT, shell: false, stdio: 'ignore' });
+    child.on('close', (code) => resolve(code));
+    child.on('error', () => resolve(1));
+  });
+}
 
 function listStagingFiles(dir, baseDir, list) {
   if (!existsSync(dir)) return list;
@@ -174,6 +232,7 @@ const CASE_COMMANDS = {
 const PROGRESS_REGEX = /(\d+)%\s*\((\d+)\/(\d+)\)/g;
 const SYNC_PROGRESS_PREFIX = 'SYNC_PROGRESS\t';
 const EXTRACTION_PROGRESS_PREFIX = 'EXTRACTION_PROGRESS\t';
+const RESUME_SKIP_PREFIX = 'RESUME_SKIP\t';
 
 function runCase(caseId, params = {}, callbacks = null, runOpts = null) {
   const def = CASE_COMMANDS[caseId];
@@ -184,6 +243,7 @@ function runCase(caseId, params = {}, callbacks = null, runOpts = null) {
   const onProgress = callbacks?.onProgress ?? (typeof callbacks === 'function' ? callbacks : null);
   const onSyncProgress = callbacks?.onSyncProgress ?? null;
   const onExtractionProgress = callbacks?.onExtractionProgress ?? null;
+  const onResumeSkip = callbacks?.onResumeSkip ?? null;
   const onChild = callbacks?.onChild ?? null;
   return new Promise((resolve) => {
     const child = spawn(cmd, args || [], {
@@ -217,6 +277,14 @@ function runCase(caseId, params = {}, callbacks = null, runOpts = null) {
             const done = Number(parts[0]);
             const total = Number(parts[1]);
             if (!Number.isNaN(done)) onExtractionProgress(done, Number.isNaN(total) ? 0 : total);
+          }
+        }
+        if (onResumeSkip && line.startsWith(RESUME_SKIP_PREFIX)) {
+          const parts = line.slice(RESUME_SKIP_PREFIX.length).split('\t');
+          if (parts.length >= 2) {
+            const skipped = Number(parts[0]);
+            const total = Number(parts[1]);
+            if (!Number.isNaN(skipped)) onResumeSkip(skipped, Number.isNaN(total) ? 0 : total);
           }
         }
       }
@@ -363,10 +431,36 @@ createServer(async (req, res) => {
         onExtractionProgress: (done, total) => {
           writeLine({ type: 'extraction_progress', done, total });
         },
+        onResumeSkip: (skipped, total) => {
+          writeLine({ type: 'resume_skip', skipped, total });
+        },
       }, runOpts);
       currentChild = null;
-      writeLine({ type: 'result', ...result });
-      res.end();
+      const interrupted = res.destroyed || result.exitCode === 143 || result.exitCode === 130 || result.signal === 'SIGTERM';
+      if (interrupted) {
+        const runId = getCurrentRunIdFromCheckpoint();
+        if (runId) spawnReportForRunId(runId).catch(() => {});
+      } else if (result.exitCode === 0) {
+        const runId = getCurrentRunIdFromCheckpoint();
+        if (runId) markRunCompleted(runId);
+      }
+      if (!res.destroyed) {
+        try {
+          writeLine({ type: 'result', ...result });
+          res.end();
+        } catch (_) {}
+      }
+    } catch (e) {
+      res.writeHead(500, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ error: String(e.message) }));
+    }
+    return;
+  }
+  if (req.method === 'GET' && url === '/api/run-status') {
+    try {
+      const status = getRunStatusFromCheckpoint();
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify(status));
     } catch (e) {
       res.writeHead(500, { 'Content-Type': 'application/json' });
       res.end(JSON.stringify({ error: String(e.message) }));

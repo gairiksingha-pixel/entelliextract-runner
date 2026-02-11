@@ -9,12 +9,16 @@ import { loadConfig, getConfigPath } from './config.js';
 import { syncAllBuckets, printSyncResults } from './s3-sync.js';
 import { runFull, runExtractionOnly, runSyncExtractPipeline } from './runner.js';
 import type { Config } from './types.js';
-import { buildSummary, writeReports } from './report.js';
+import { buildSummary, writeReports, writeReportsForRunId } from './report.js';
 import { openCheckpointDb, getRecordsForRun, closeCheckpointDb } from './checkpoint.js';
 import { clearPartialFileAndResumeState } from './resume-state.js';
 import { computeMetrics } from './metrics.js';
 import { writeFileSync, readFileSync, existsSync } from 'node:fs';
 import { dirname } from 'node:path';
+
+process.on('SIGTERM', () => {
+  process.exit(143);
+});
 
 const LAST_RUN_FILE = 'last-run-id.txt';
 
@@ -147,8 +151,23 @@ program
       if (pairs?.length) console.log(`Scoped to ${pairs.length} pair(s): ${pairs.map(({ tenant: t, purchaser: p }) => `${t}/${p}`).join(', ')}`);
       else if (tenant && purchaser) console.log(`Scoped to tenant: ${tenant}, purchaser: ${purchaser}`);
       const result = await (doSync
-        ? runFull({ configPath: globalOpts.config, syncLimit, extractLimit, tenant, purchaser, pairs })
-        : runExtractionOnly({ configPath: globalOpts.config, extractLimit, tenant, purchaser, pairs }));
+        ? runFull({
+            configPath: globalOpts.config,
+            syncLimit,
+            extractLimit,
+            tenant,
+            purchaser,
+            pairs,
+            onFileComplete: doReport ? (runId) => writeReportsForRunId(config, runId) : undefined,
+          })
+        : runExtractionOnly({
+            configPath: globalOpts.config,
+            extractLimit,
+            tenant,
+            purchaser,
+            pairs,
+            onFileComplete: doReport ? (runId) => writeReportsForRunId(config, runId) : undefined,
+          }));
       if (doSync && result.syncResults && result.syncResults.length > 0) {
         printSyncResults(result.syncResults, syncLimit);
       }
@@ -210,6 +229,7 @@ program
       const stdoutPiped = typeof process !== 'undefined' && process.stdout?.isTTY !== true;
       const limitNum = limit !== undefined && limit > 0 ? limit : 0;
       if (stdoutPiped && limitNum > 0) process.stdout.write(`SYNC_PROGRESS\t0\t${limitNum}\n`);
+      const pipelineConfig = loadConfig(globalOpts.config ?? getConfigPath());
       const result = await runSyncExtractPipeline({
         configPath: globalOpts.config,
         limit,
@@ -228,6 +248,7 @@ program
               process.stdout.write(`EXTRACTION_PROGRESS\t${done}\t${total}\n`);
             }
           : undefined,
+        onFileComplete: doReport ? (runId) => writeReportsForRunId(pipelineConfig, runId) : undefined,
       });
       if (result.syncResults && result.syncResults.length > 0) {
         printSyncResults(result.syncResults, limit ?? undefined);
@@ -236,15 +257,15 @@ program
         console.log('All files in the stage are extracted. Please sync new files.');
       }
       if (result.metrics.success > 0) {
-        const extractionsDir = `${dirname(config.report.outputDir)}/extractions`;
+        const extractionsDir = `${dirname(result.config.report.outputDir)}/extractions`;
         console.log(`Extraction result(s): ${extractionsDir} (full API response JSON per file)`);
       }
       console.log(`Extraction metrics: success=${result.metrics.success}, failed=${result.metrics.failed}, skipped=${result.metrics.skipped}`);
-      saveLastRunId(config, result.run.runId);
+      saveLastRunId(result.config, result.run.runId);
       if (doReport) {
         const summary = buildSummary(result.metrics);
-        writeReports(config, summary);
-        console.log(`Reports path: ${config.report.outputDir}`);
+        writeReports(result.config, summary);
+        console.log(`Reports path: ${result.config.report.outputDir}`);
       }
     } catch (e) {
       console.error('Sync-extract failed:', e instanceof Error ? e.message : String(e));

@@ -35,6 +35,8 @@ export interface RunOptions {
   purchaser?: string;
   /** Sync/run only for these (tenant, purchaser) pairs. When set, overrides single tenant/purchaser. */
   pairs?: TenantPurchaserPair[];
+  /** Called after each file completes so the report can be updated. */
+  onFileComplete?: (runId: string) => void;
 }
 
 /** Single limit for pipeline mode: sync up to N files and extract each as it is synced (in background). */
@@ -101,6 +103,7 @@ export async function runFull(options: RunOptions = {}): Promise<FullRunResult> 
     tenant: options.tenant,
     purchaser: options.purchaser,
     pairs: options.pairs,
+    onFileComplete: options.onFileComplete,
   });
   const metrics = computeMetrics(
     runResult.runId,
@@ -163,6 +166,9 @@ export async function runSyncExtractPipeline(options: PipelineOptions = {}): Pro
       extractOneFile(config, runId, db, job).finally(() => {
         extractionDone++;
         options.onExtractionProgress?.(extractionDone, extractionQueued);
+        try {
+          options.onFileComplete?.(runId);
+        } catch (_) {}
       })
     );
   };

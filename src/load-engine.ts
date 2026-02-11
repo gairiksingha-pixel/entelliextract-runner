@@ -172,7 +172,14 @@ export async function extractOneFile(
  */
 export async function runExtraction(
   config: Config,
-  options?: { extractLimit?: number; tenant?: string; purchaser?: string; pairs?: { tenant: string; purchaser: string }[] }
+  options?: {
+    extractLimit?: number;
+    tenant?: string;
+    purchaser?: string;
+    pairs?: { tenant: string; purchaser: string }[];
+    /** Called after each file completes (done or error) so the report can be updated. */
+    onFileComplete?: (runId: string) => void;
+  }
 ): Promise<LoadEngineResult> {
   const db = openCheckpointDb(config.run.checkpointPath);
   const runId = getOrCreateRunId(db);
@@ -215,13 +222,21 @@ export async function runExtraction(
   let done = 0;
   const isTTY = typeof process !== 'undefined' && process.stdout?.isTTY === true;
   const barWidth = 24;
+  const stdoutPiped = typeof process !== 'undefined' && process.stdout?.isTTY !== true;
+
+  if (stdoutPiped && completed.size > 0 && total > 0) {
+    process.stdout.write(`RESUME_SKIP\t${completed.size}\t${jobs.length}\n`);
+  }
 
   function updateProgress(): void {
-    if (!isTTY || total === 0) return;
-    const pct = total === 0 ? 100 : Math.min(100, Math.round((100 * done) / total));
-    const filled = Math.round((barWidth * done) / total);
-    const bar = '='.repeat(filled) + ' '.repeat(barWidth - filled);
-    process.stdout.write(`\rExtraction: [${bar}] ${pct}% (${done}/${total})`);
+    if (isTTY && total > 0) {
+      const pct = total === 0 ? 100 : Math.min(100, Math.round((100 * done) / total));
+      const filled = Math.round((barWidth * done) / total);
+      const bar = '='.repeat(filled) + ' '.repeat(barWidth - filled);
+      process.stdout.write(`\rExtraction: [${bar}] ${pct}% (${done}/${total})`);
+    } else if (stdoutPiped && total > 0) {
+      process.stdout.write(`EXTRACTION_PROGRESS\t${done}\t${total}\n`);
+    }
   }
 
   for (const job of toProcess) {
@@ -299,6 +314,9 @@ export async function runExtraction(
     }).finally(() => {
       done++;
       updateProgress();
+      try {
+        options?.onFileComplete?.(runIdToUse);
+      } catch (_) {}
     });
   }
 
