@@ -1,6 +1,6 @@
-# EntelliExtract Test Stub
+# EntelliExtract Runner
 
-TypeScript test automation for the EntelliExtract spreadsheet extraction API. Supports S3 sync from a single bucket with tenant/purchaser folders, file-level checkpointing (resumable runs), configurable concurrency and rate limiting, full request/response logging, and executive summary reports (Markdown, HTML, JSON).
+TypeScript runner and browser app for the EntelliExtract spreadsheet extraction API. Supports S3 sync from a single bucket with tenant/purchaser folders, file-level checkpointing (resumable runs), configurable concurrency and rate limiting, full request/response logging, and executive summary reports (Markdown, HTML, JSON).
 
 ## Features & capabilities
 
@@ -11,7 +11,7 @@ TypeScript test automation for the EntelliExtract spreadsheet extraction API. Su
 - **Extraction result classification**: For every file, the full extract API JSON response is stored and classified using the response body’s `success` flag (`"success": true` → successful response, `"success": false` → failed response). Upload/read failures are counted as **failed file uploads**.
 - **Executive summary reporting**: Generates Markdown, HTML, and JSON executive summaries with throughput, latency percentiles, error rate, anomaly detection, and per-file extraction results (linked to the stored JSON).
 - **Sync-extract pipeline mode**: Optional `sync-extract` command that syncs and extracts files in a single streaming pipeline (sync one → extract one), useful for incremental runs.
-- **HTML test runner UI**: Browser-based runner that drives the CLI test cases and shows stdout/stderr per scenario.
+- **Browser app**: Web UI to run sync, extract, and pipeline scenarios and view output inline.
 
 ## Requirements
 
@@ -23,7 +23,7 @@ TypeScript test automation for the EntelliExtract spreadsheet extraction API. Su
 1. **Clone and install**
 
    ```bash
-   cd entelliextract-test-stub
+   cd entelliextract-runner
    npm install
    ```
 
@@ -55,9 +55,9 @@ TypeScript test automation for the EntelliExtract spreadsheet extraction API. Su
    npm run build
    ```
 
-## Quick start (HTML UI – recommended)
+## Quick start (browser app – recommended)
 
-Use the browser-based test runner first to explore commands and verify your setup.
+Use the browser app to run sync, extract, and pipeline scenarios and verify your setup.
 
 1. **Build** the project (ensures `dist/index.js` exists):
 
@@ -65,16 +65,16 @@ Use the browser-based test runner first to explore commands and verify your setu
    npm run build
    ```
 
-2. **Start the test runner server** from the project root:
+2. **Start the app server** from the project root:
 
    ```bash
-   npm run test-runner
+   npm run app
    ```
 
-3. **Open the HTML UI** in your browser:
+3. **Open the app** in your browser:
 
-   - Visit `http://localhost:8765/`.
-   - Click **Run** next to any test case to execute it; the command, exit code, stdout, and stderr are shown inline.
+   - Visit [http://localhost:8765/](http://localhost:8765/).
+   - Select **Brand** and **Purchaser**, set limits if needed, then click **Run** to execute a scenario; output appears inline.
 
 4. **Review reports and logs**:
 
@@ -211,6 +211,7 @@ then at `concurrency = 10` and `requestsPerSecond = 10`, your single test run is
 | Sync/run for one tenant+purchaser | `npm run sync -- --tenant <tenant> --purchaser <purchaser>` (same for `run`) |
 | Use custom config | `npm run sync -c path/to/config.yaml` (any command) |
 | Sync-extract pipeline | `node dist/index.js sync-extract --limit <n>` |
+| Start browser app | `npm run app` or `node app-server.mjs` |
 
 ### Prerequisites for testing
 
@@ -220,99 +221,23 @@ then at `concurrency = 10` and `requestsPerSecond = 10`, your single test run is
 
 ---
 
-## Test Cases
+## Browser app
 
-Manual test cases covering **positive**, **negative**, and **edge** scenarios aligned to the core requirements. **Commands** for each case are listed in the tables below (Positive / Negative / Edge); run the command and assert the **Expected** result. The browser test runner (see [Test runner (HTML UI)](#test-runner-html-ui)) uses these same cases without showing the command column; refer to this README for the exact command per case.
-
-### Requirements coverage (core objectives → test cases)
-
-| # | Core requirement | Test case IDs | What is verified |
-|---|------------------|---------------|------------------|
-| 1 | **Historical dataset coverage** – Sync from brand S3 buckets (e.g. Sundia, No Cow, Tractor) to staging and run extraction against all files | P1, P5, E3 | Sync all brands to staging; full pipeline (sync + run) processes all files; S3 edge (empty or partial failures). |
-| 2 | **Full logging & traceability** – Record all requests and responses in a structured format for debugging and output comparison | P2, P7 | Request-response log updated per run; log file has structured JSONL (runId, filePath, request, response). |
-| 3 | **Resumable execution** – File-level checkpointing; resume without reprocessing completed files | E2 | Resume after interrupt or corrupt checkpoint (new run ID, no crash). |
-| 4 | **Load testing & benchmarking** – Configurable concurrency and rate; benchmark throughput, avg latency, error rates | P2, P7, E5 | Run produces report; report has throughput, P95, error rate; run under concurrency/rate cap (E5). |
-| 5 | **Executive summary report** – Markdown, HTML, JSON (PDF optional) with total files, run time, success/failure, P95, anomalies | P3, P7, E4 | Report from last run or by run ID; formats .md/.html/.json; report when all failures (E4). |
-
-*Bonus (AI agent, intelligent retries): not implemented; no test cases.*
-
-**Deliverables:** Working code = repo; Setup = README (Requirements, Setup, Commands); Example run output = "Example Run Output" section and `output/reports/` + `output/logs/` after a run.
-
-### Positive test cases
-
-| ID  | Scenario              | Command                              | Expected        |
-|-----|-----------------------|--------------------------------------|-----------------|
-| P1  | Sync (valid config)   | `npm start sync`                     | Exit 0, files in staging |
-| P2  | Run extraction        | `npm start run -- --no-sync`         | Exit 0, Success/Failed/Skipped, report + log |
-| P3  | Report (last run or by run-id) | `npm start report [--run-id <id>]` | Exit 0, report files (.md + .html + .json) |
-| P4  | Custom config         | `npm start sync -c config/config.yaml` | Exit 0, uses given config |
-| P5  | **Req 1** Full pipeline | `npm start run`                    | Exit 0, sync then run all files |
-| P6  | Run, no report        | `npm start run -- --no-sync --no-report` | Exit 0, no new reports |
-| P7  | **Req 2/4/5** Output structure | After run: inspect `output/logs/*.jsonl` + report | JSONL: runId, filePath, request, response; report: throughput, P95, .md/.html/.json |
-
-**Details (positive)**
-
-- **P1** — *Given:* Valid `config.yaml`, real S3 buckets, AWS creds. *Expect:* Structured "Sync Summary" with download/skipped/errors and per-brand staging paths; files under `output/staging/<brand>/<purchaser>/`.
-- **P2** — *Given:* Staging has ≥1 file, API creds set. *Expect:* "Run run_... finished. Success: N, Failed: M, Skipped: K"; report in `output/reports/`; checkpoint and request-response log updated.
-- **P3** — *Given:* At least one completed run (last-run-id.txt exists) or valid run ID. *Expect:* "Report(s) written: [ ... ]"; markdown/HTML/JSON with metrics and run ID.
-- **P4** — *Given:* Valid config path. *Expect:* Sync uses buckets/staging from that file.
-- **P5** — *Given:* Multiple brands in config; AWS and API creds. *Expect:* Per-brand sync then extraction over all files; console shows sync counts and Success/Failed/Skipped.
-- **P6** — *Given:* Staging populated. *Expect:* Run completes; no new files in `output/reports/`.
-- **P7** — *Given:* A run with ≥1 request. *Expect:* Log file has JSONL with runId, filePath, request, response; report has throughput, P95, error rate and .md/.html/.json formats.
-
-### Negative test cases
-
-Negative coverage is by **value combination**: change config path or run context to get missing config, invalid YAML, invalid schema, or no valid run. If config is missing or invalid, the process exits before running; one consolidated check is enough.
-
-| ID  | Scenario           | Command / value combo                         | Expected   |
-|-----|--------------------|------------------------------------------------|------------|
-| N1  | Invalid config     | `sync -c config/nonexistent.yaml` (missing file) | Exit 1, Failed to load config |
-| N2  | Report without valid run | `report` with no last-run-id, or `report --run-id run_000...fake` | Exit 1, No last run found / No records found |
-| N3  | Sync fails (AWS)   | `sync` with wrong creds or bucket              | Exit 1, Sync failed |
-
-**Details (negative)**
-
-- **N1** — *Given:* Missing config file (e.g. `config/nonexistent.yaml`). *Expect:* Exit 1; process does not run; message indicates config load failure.
-- **N2** — *Value combos:* No `last-run-id.txt`, or fake run ID. *Expect:* Exit 1; "No last run found" or "No records found for run ...".
-- **N3** — *Given:* Wrong AWS credentials or invalid bucket. *Expect:* Exit 1; "Sync failed: ..." with underlying error.
-
-### Edge test cases
-
-| ID  | Scenario            | Command / value combo                | Expected   |
-|-----|---------------------|--------------------------------------|------------|
-| E1  | Empty staging or all API fail | `npm start run -- --no-sync` (empty staging or bad API) | Exit 0, Success: 0 or Failed: N, no crash |
-| E2  | Resume / corrupt checkpoint | Run twice (Ctrl+C then run again) or set checkpoint.json to `{}` then run | 2nd run skips done files; or new run ID, no crash |
-| E3  | S3 edge (empty or partial failures) | `npm start sync` (empty bucket or some keys fail) | Exit 0, synced 0 or errors M>0 |
-| E4  | Report (all failed run) | `npm start report -- --run-id <id>` for run with 0 success | Exit 0, failed count, anomalies |
-| E5  | **Req 4** Concurrency/rate | `npm start run -- --no-sync` (config: concurrency, rps) | Exit 0, run under cap |
-
-**Details (edge)**
-
-- **E1** — *Value combos:* Empty staging, or staging with files but API failing. *Expect:* Exit 0; "Success: 0, Failed: 0" or "Failed: N"; no crash.
-- **E2** — *Value combos:* Resume after Ctrl+C (second run skips done files), or corrupt/empty checkpoint. *Expect:* Exit 0; new run ID when checkpoint invalid; no crash.
-- **E3** — *Value combos:* Empty bucket, or bucket with some keys that fail. *Expect:* Exit 0; Sync Summary with Downloaded: 0 or errors M>0.
-- **E4** — *Given:* Run ID for a run where all extractions failed. *Expect:* Exit 0; report has failed count, 0 success, anomalies.
-- **E5** — *Given:* config has run.concurrency and run.requestsPerSecond; staging has files. *Expect:* Exit 0; run completes; throughput/latency under cap.
-
-### Test runner (HTML UI)
-
-Run all test cases from a browser with one click per case:
+Run sync, extract, and pipeline from a browser UI:
 
 1. **Build** the project (so `dist/index.js` exists):
    ```bash
    npm run build
    ```
-2. **Start the test runner server** (from project root):
+2. **Start the app** (from project root):
    ```bash
-   npm run test-runner
+   npm run app
    ```
-   Or: `node test-runner-server.mjs`
+   Or: `node app-server.mjs`
 3. **Open in browser:** [http://localhost:8765/](http://localhost:8765/)
-4. Click **Run** next to any test case; the command runs in the background and the result (exit code, stdout, stderr) appears below the row.
+4. Use the dropdowns to pick **Brand** and **Purchaser**, optionally set limits, then click **Run** to execute a scenario and see the output inline.
 
-**Logo:** The test runner page uses the intellirevenue logo if present. Place your logo at `assets/logo.png`, or any `.png` file in the `assets/` folder.
-
-Negative cases (N1–N3): N1 uses a missing config path (`config/nonexistent.yaml`); N2 uses a fake run ID; N3 uses live sync (wrong creds/bucket for failure).
+**Logo:** The app shows the intellirevenue logo if present. Place your logo at `assets/logo.png`, or any `.png` file in the `assets/` folder.
 
 ### Quick verification script (optional)
 

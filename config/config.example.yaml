@@ -1,4 +1,4 @@
-# EntelliExtract Test Stub - Configuration (example)
+# EntelliExtract Runner - Configuration (example)
 # 1. Copy this file to config.yaml:  cp config.example.yaml config.yaml
 # 2. Set environment variables (see .env.example or README): ENTELLIEXTRACT_BASE_URL, etc.
 # 3. Edit buckets / paths below if needed.

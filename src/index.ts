@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * EntelliExtract Test Stub – CLI
+ * EntelliExtract Runner – CLI
  * Commands: sync | run | report
  */
 
@@ -33,7 +33,7 @@ function saveLastRunId(config: ReturnType<typeof loadConfig>, runId: string): vo
 }
 
 program
-  .name('entelliextract-test-stub')
+  .name('entelliextract-runner')
   .description('Test automation for EntelliExtract API: S3 sync, extraction run with checkpointing, and executive report')
   .option('-c, --config <path>', 'Config file path', getConfigPath());
 

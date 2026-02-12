@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /**
- * Local test runner server. Serves test-cases.html and runs test case commands via POST /run.
- * Start from project root: node test-runner-server.mjs
+ * EntelliExtract app server. Serves the browser UI (index.html) and runs sync/extract/report via POST /run.
+ * Start from project root: npm run app  (or: node app-server.mjs)
  * Open: http://localhost:8765/
  */
 
@@ -347,7 +347,7 @@ function runCase(caseId, params = {}, callbacks = null, runOpts = null) {
   });
 }
 
-const HTML_PATH = join(__dirname, 'test-cases.html');
+const HTML_PATH = join(__dirname, 'index.html');
 
 const MIME = { '.png': 'image/png', '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.svg': 'image/svg+xml', '.ico': 'image/x-icon' };
 createServer(async (req, res) => {
@@ -391,14 +391,14 @@ createServer(async (req, res) => {
     }
     return;
   }
-  if (req.method === 'GET' && (url === '/' || url === '/test-cases.html')) {
+  if (req.method === 'GET' && (url === '/' || url === '/index.html')) {
     try {
       const html = readFileSync(HTML_PATH, 'utf-8');
       res.writeHead(200, { 'Content-Type': 'text/html' });
       res.end(html);
     } catch (e) {
       res.writeHead(500, { 'Content-Type': 'text/plain' });
-      res.end('test-cases.html not found');
+      res.end('index.html not found');
     }
     return;
   }
@@ -625,6 +625,6 @@ createServer(async (req, res) => {
   res.writeHead(404);
   res.end();
 }).listen(PORT, () => {
-  console.log(`Test runner: http://localhost:${PORT}/`);
-  console.log('Open in browser and click Run on any test case.');
+  console.log(`EntelliExtract app: http://localhost:${PORT}/`);
+  console.log('Open in browser, select Brand/Purchaser, then click Run.');
 });
