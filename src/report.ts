@@ -3,16 +3,29 @@
  * Includes full API extraction response(s) per file when available.
  */
 
-import { mkdirSync, existsSync, writeFileSync, readFileSync, readdirSync, unlinkSync, statSync } from 'node:fs';
-import { join, dirname, basename, extname } from 'node:path';
-import type { Config, RunMetrics, ExecutiveSummary } from './types.js';
-import { openCheckpointDb, getRecordsForRun, getAllRunIdsOrdered, closeCheckpointDb } from './checkpoint.js';
-import { computeMetrics } from './metrics.js';
+import {
+  mkdirSync,
+  existsSync,
+  writeFileSync,
+  readFileSync,
+  readdirSync,
+  unlinkSync,
+  statSync,
+} from "node:fs";
+import { join, dirname, basename, extname } from "node:path";
+import type { Config, RunMetrics, ExecutiveSummary } from "./types.js";
+import {
+  openCheckpointDb,
+  getRecordsForRun,
+  getAllRunIdsOrdered,
+  closeCheckpointDb,
+} from "./checkpoint.js";
+import { computeMetrics } from "./metrics.js";
 
 export interface ExtractionResultEntry {
   filename: string;
   response: unknown;
-  /** Whether the API response body had success: true (succeeded folder). */
+  /** Derived from API response.success when available */
   extractionSuccess: boolean;
 }
 
@@ -23,75 +36,123 @@ export interface HistoricalRunSummary {
   runDurationSeconds: number;
 }
 
-/** Same naming as load-engine so we only show results for files that completed in this run. */
-function extractionResultFilenameFromRecord(record: { relativePath: string; brand: string }): string {
-  const safe = record.relativePath.replaceAll('/', '_').replaceAll(/[^a-zA-Z0-9._-]/g, '_');
-  const base = record.brand + '_' + (safe || 'file');
-  return base.endsWith('.json') ? base : base + '.json';
+function extractionResultFilenameFromRecord(record: {
+  relativePath: string;
+  brand: string;
+}): string {
+  const safe = record.relativePath
+    .replaceAll("/", "_")
+    .replaceAll(/[^a-zA-Z0-9._-]/g, "_");
+  const base = record.brand + "_" + (safe || "file");
+  return base.endsWith(".json") ? base : base + ".json";
 }
 
-function loadJsonEntries(dir: string, extractionSuccess: boolean): ExtractionResultEntry[] {
+/**
+ * 🔥 FIXED:
+ * extractionSuccess now respects response.success if present.
+ * Folder name is only fallback.
+ */
+function loadJsonEntries(
+  dir: string,
+  defaultExtractionSuccess: boolean,
+): ExtractionResultEntry[] {
   const entries: ExtractionResultEntry[] = [];
+
   const files = readdirSync(dir, { withFileTypes: true }).filter(
-    (e) => e.isFile() && e.name.toLowerCase().endsWith('.json')
+    (e) => e.isFile() && e.name.toLowerCase().endsWith(".json"),
   );
+
   for (const e of files) {
     const path = join(dir, e.name);
+
     try {
-      const raw = readFileSync(path, 'utf-8');
+      const raw = readFileSync(path, "utf-8");
       const response = JSON.parse(raw) as unknown;
-      entries.push({ filename: e.name, response, extractionSuccess });
+
+      let extractionSuccess = defaultExtractionSuccess;
+
+      // ✅ Trust API response.success if present
+      if (
+        typeof response === "object" &&
+        response !== null &&
+        "success" in response
+      ) {
+        const successValue = (response as { success?: unknown }).success;
+        if (typeof successValue === "boolean") {
+          extractionSuccess = successValue;
+        }
+      }
+
+      entries.push({
+        filename: e.name,
+        response,
+        extractionSuccess,
+      });
     } catch {
       // skip unreadable
     }
   }
+
   return entries;
 }
 
-function loadExtractionResults(config: Config, runId: string): ExtractionResultEntry[] {
-  const baseDir = join(dirname(config.report.outputDir), 'extractions');
+function loadExtractionResults(
+  config: Config,
+  runId: string,
+): ExtractionResultEntry[] {
+  const baseDir = join(dirname(config.report.outputDir), "extractions");
   if (!existsSync(baseDir)) return [];
 
-  const succeededDir = join(baseDir, 'succeeded');
-  const failedDir = join(baseDir, 'failed');
-  const fromSucceeded = existsSync(succeededDir) ? loadJsonEntries(succeededDir, true) : [];
-  const fromFailed = existsSync(failedDir) ? loadJsonEntries(failedDir, false) : [];
+  const succeededDir = join(baseDir, "succeeded");
+  const failedDir = join(baseDir, "failed");
+
+  const fromSucceeded = existsSync(succeededDir)
+    ? loadJsonEntries(succeededDir, true)
+    : [];
+
+  const fromFailed = existsSync(failedDir)
+    ? loadJsonEntries(failedDir, false)
+    : [];
 
   if (fromSucceeded.length > 0 || fromFailed.length > 0) {
     return [...fromSucceeded, ...fromFailed];
   }
 
-  // Backward compatibility: load from run dir and infer extractionSuccess from response.success
-  return loadJsonEntries(baseDir, false).map((entry) => ({
-    ...entry,
-    extractionSuccess:
-      typeof entry.response === 'object' &&
-      entry.response !== null &&
-      (entry.response as { success?: boolean }).success === true,
-  }));
+  // Backward compatibility: flat structure
+  return loadJsonEntries(baseDir, false);
 }
 
-/** Keep only extraction results for files that completed successfully in this run (so report doesn't show old run's responses). */
 function filterExtractionResultsForRun(
   config: Config,
   runId: string,
-  allResults: ExtractionResultEntry[]
+  allResults: ExtractionResultEntry[],
 ): ExtractionResultEntry[] {
   const db = openCheckpointDb(config.run.checkpointPath);
   const records = getRecordsForRun(db, runId);
   closeCheckpointDb(db);
+
   const doneFilenames = new Set(
     records
-      .filter((r) => r.status === 'done')
-      .map((r) => extractionResultFilenameFromRecord({ relativePath: r.relativePath, brand: r.brand }))
+      .filter((r) => r.status === "done")
+      .map((r) =>
+        extractionResultFilenameFromRecord({
+          relativePath: r.relativePath,
+          brand: r.brand,
+        }),
+      ),
   );
+
   if (doneFilenames.size === 0) return [];
+
   return allResults.filter((e) => doneFilenames.has(e.filename));
 }
 
-function minMaxDatesFromRecords(records: { startedAt?: string; finishedAt?: string }[]): { start: Date; end: Date } {
+function minMaxDatesFromRecords(
+  records: { startedAt?: string; finishedAt?: string }[],
+) {
   let startedAt = Number.NaN;
   let finishedAt = Number.NaN;
+
   for (const r of records) {
     if (r.startedAt) {
       const t = new Date(r.startedAt).getTime();
@@ -102,26 +163,47 @@ function minMaxDatesFromRecords(records: { startedAt?: string; finishedAt?: stri
       finishedAt = Number.isNaN(finishedAt) ? t : Math.max(finishedAt, t);
     }
   }
+
   const start = Number.isNaN(startedAt) ? new Date(0) : new Date(startedAt);
-  const end = Number.isNaN(finishedAt) ? new Date(startedAt || Date.now()) : new Date(finishedAt);
+  const end = Number.isNaN(finishedAt)
+    ? new Date(startedAt || Date.now())
+    : new Date(finishedAt);
+
   return { start, end };
 }
 
-/** Load all runs from checkpoint (latest first) with metrics and extraction results for full historical report. */
-export function loadHistoricalRunSummaries(config: Config): HistoricalRunSummary[] {
+export function loadHistoricalRunSummaries(
+  config: Config,
+): HistoricalRunSummary[] {
   const db = openCheckpointDb(config.run.checkpointPath);
   const runIds = getAllRunIdsOrdered(db);
+
   const out: HistoricalRunSummary[] = [];
+
   for (const runId of runIds) {
     const records = getRecordsForRun(db, runId);
     if (records.length === 0) continue;
+
     const { start, end } = minMaxDatesFromRecords(records);
     const metrics = computeMetrics(runId, records, start, end);
+
     const allResults = loadExtractionResults(config, runId);
-    const extractionResults = filterExtractionResultsForRun(config, runId, allResults);
+    const extractionResults = filterExtractionResultsForRun(
+      config,
+      runId,
+      allResults,
+    );
+
     const runDurationSeconds = (end.getTime() - start.getTime()) / 1000;
-    out.push({ runId, metrics, extractionResults, runDurationSeconds });
+
+    out.push({
+      runId,
+      metrics,
+      extractionResults,
+      runDurationSeconds,
+    });
   }
+
   closeCheckpointDb(db);
   return out;
 }
@@ -135,16 +217,29 @@ function formatDuration(ms: number): string {
   return `${sec}s`;
 }
 
-const MONTH_NAMES = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+const MONTH_NAMES = [
+  "Jan",
+  "Feb",
+  "Mar",
+  "Apr",
+  "May",
+  "Jun",
+  "Jul",
+  "Aug",
+  "Sep",
+  "Oct",
+  "Nov",
+  "Dec",
+];
 
 function dayOrdinal(day: number): string {
   const s = String(day);
-  if (day >= 11 && day <= 13) return s + 'th';
+  if (day >= 11 && day <= 13) return s + "th";
   const last = s.slice(-1);
-  if (last === '1') return s + 'st';
-  if (last === '2') return s + 'nd';
-  if (last === '3') return s + 'rd';
-  return s + 'th';
+  if (last === "1") return s + "st";
+  if (last === "2") return s + "nd";
+  if (last === "3") return s + "rd";
+  return s + "th";
 }
 
 /** Human-readable date and time for a run (e.g. "Feb-2nd-2026 09:32-AM") for accordion labels. */
@@ -155,9 +250,9 @@ function formatRunDateTime(iso: string): string {
   const year = d.getFullYear();
   const hours24 = d.getHours();
   const hours12 = hours24 % 12 || 12;
-  const h = String(hours12).padStart(2, '0');
-  const min = String(d.getMinutes()).padStart(2, '0');
-  const ampm = hours24 < 12 ? 'AM' : 'PM';
+  const h = String(hours12).padStart(2, "0");
+  const min = String(d.getMinutes()).padStart(2, "0");
+  const ampm = hours24 < 12 ? "AM" : "PM";
   return `${month}-${dayOrdinal(day)}-${year} ${h}:${min}-${ampm}`;
 }
 
@@ -166,7 +261,7 @@ export function buildSummary(metrics: RunMetrics): ExecutiveSummary {
   const end = new Date(metrics.finishedAt).getTime();
   const runDurationSeconds = (end - start) / 1000;
   return {
-    title: 'EntelliExtract Test Run – Executive Summary',
+    title: "EntelliExtract Test Run – Executive Summary",
     generatedAt: new Date().toISOString(),
     metrics,
     runDurationSeconds,
@@ -177,56 +272,88 @@ function sectionForRun(entry: HistoricalRunSummary): string {
   const m = entry.metrics;
   const wallClockMs = entry.runDurationSeconds * 1000;
   const runDuration = formatDuration(wallClockMs);
+  const succeededCount = entry.extractionResults.filter(
+    (e) => e.extractionSuccess,
+  ).length;
+  const failedCount = entry.extractionResults.filter(
+    (e) => !e.extractionSuccess,
+  ).length;
+  // Reclassify successes as failures when API response.success === false,
+  // but always keep total processed = m.success + m.failed.
+  const reclassifiedFailuresFromResponses = failedCount;
+  const displaySuccess = Math.max(0, m.success - reclassifiedFailuresFromResponses);
+  const displayFailed = m.failed + reclassifiedFailuresFromResponses;
   const processed = m.success + m.failed;
-  const throughputPerSecond = entry.runDurationSeconds > 0 ? processed / entry.runDurationSeconds : 0;
+  const throughputPerSecond =
+    entry.runDurationSeconds > 0 ? processed / entry.runDurationSeconds : 0;
   const throughputPerMinute = throughputPerSecond * 60;
   const totalApiTime = formatDuration(m.totalProcessingTimeMs);
+  const displayErrorRate =
+    processed > 0 ? displayFailed / processed : m.errorRate;
   const anomalyItems = m.anomalies.map((a) => {
-    const pathSuffix = a.filePath ? ' (' + escapeHtml(a.filePath) + ')' : '';
-    return '<li><strong>' + escapeHtml(a.type) + '</strong>: ' + escapeHtml(a.message) + pathSuffix + '</li>';
+    const pathSuffix = a.filePath ? " (" + escapeHtml(a.filePath) + ")" : "";
+    return (
+      "<li><strong>" +
+      escapeHtml(a.type) +
+      "</strong>: " +
+      escapeHtml(a.message) +
+      pathSuffix +
+      "</li>"
+    );
   });
-  const anomaliesList = m.anomalies.length > 0 ? '<ul>' + anomalyItems.join('') + '</ul>' : '<p>None detected.</p>';
+  const anomaliesList =
+    m.anomalies.length > 0
+      ? "<ul>" + anomalyItems.join("") + "</ul>"
+      : "<p>None detected.</p>";
 
-  const succeededCount = entry.extractionResults.filter((e) => e.extractionSuccess).length;
-  const failedCount = entry.extractionResults.filter((e) => !e.extractionSuccess).length;
   const extractionSection =
     entry.extractionResults.length > 0
       ? `
   <h3>Extraction results</h3>
-  <p class="extraction-note">${succeededCount} succeeded, ${failedCount} failed. Full API response per file is in the <strong>Summary Report (JSON)</strong> and in the <strong>Extraction Results</strong> download</p>`
-      : '';
+  <p class="extraction-note">${succeededCount} successful responses, ${failedCount} failed responses.</p>`
+      : "";
   const b = m.failureBreakdown;
-  const failureBreakdownRows = m.failed > 0
-    ? [
-        b.timeout ? `<tr><td>Timeout</td><td>${b.timeout}</td></tr>` : '',
-        b.clientError ? `<tr><td>Client error (4xx)</td><td>${b.clientError}</td></tr>` : '',
-        b.serverError ? `<tr><td>Service error (5xx)</td><td>${b.serverError}</td></tr>` : '',
-        b.readError ? `<tr><td>Read file error</td><td>${b.readError}</td></tr>` : '',
-        b.other ? `<tr><td>Other</td><td>${b.other}</td></tr>` : '',
-      ].filter(Boolean).join('')
-    : '';
-  const failureBreakdownSection = m.failed > 0
-    ? `
+  const failureBreakdownRows =
+    m.failed > 0
+      ? [
+          b.timeout ? `<tr><td>Timeout</td><td>${b.timeout}</td></tr>` : "",
+          b.clientError
+            ? `<tr><td>Client error (4xx)</td><td>${b.clientError}</td></tr>`
+            : "",
+          b.serverError
+            ? `<tr><td>Service error (5xx)</td><td>${b.serverError}</td></tr>`
+            : "",
+          b.readError
+            ? `<tr><td>Failed file uploads</td><td>${b.readError}</td></tr>`
+            : "",
+          b.other ? `<tr><td>Other</td><td>${b.other}</td></tr>` : "",
+        ]
+          .filter(Boolean)
+          .join("")
+      : "";
+  const failureBreakdownSection =
+    m.failed > 0
+      ? `
   <h3>Failure breakdown by error type</h3>
   <table>
     <tr><th>Error type</th><th>Count</th></tr>
     ${failureBreakdownRows}
   </table>`
-    : '';
+      : "";
 
   const failureDetailsRows =
     (m.failureDetails?.length ?? 0) > 0
-      ? m.failureDetails!
-          .map((f) => {
-            const msg = (f.errorMessage ?? '').trim();
+      ? m
+          .failureDetails!.map((f) => {
+            const msg = (f.errorMessage ?? "").trim();
             const snippet =
               msg.length > 0
-                ? escapeHtml(msg.slice(0, 200)) + (msg.length > 200 ? '…' : '')
+                ? escapeHtml(msg.slice(0, 200)) + (msg.length > 200 ? "…" : "")
                 : '<span class="muted">(no response body)</span>';
-            return `<tr><td>${f.statusCode ?? '—'}</td><td class="file-path">${escapeHtml(f.filePath)}</td><td>${snippet}</td></tr>`;
+            return `<tr><td>${f.statusCode ?? "—"}</td><td class="file-path">${escapeHtml(f.filePath)}</td><td>${snippet}</td></tr>`;
           })
-          .join('')
-      : '';
+          .join("")
+      : "";
   const failureDetailsSection =
     failureDetailsRows.length > 0
       ? `
@@ -236,48 +363,53 @@ function sectionForRun(entry: HistoricalRunSummary): string {
     <tr><th>Status</th><th>File</th><th>Message snippet</th></tr>
     ${failureDetailsRows}
   </table>`
-      : '';
+      : "";
 
   const topSlowestRows = m.topSlowestFiles
-    .map((e) => `<tr><td class="file-path">${escapeHtml(e.filePath)}</td><td>${e.latencyMs.toFixed(0)}</td></tr>`)
-    .join('');
-  const topSlowestSection = m.topSlowestFiles.length > 0
-    ? `
+    .map(
+      (e) =>
+        `<tr><td class="file-path">${escapeHtml(e.filePath)}</td><td>${e.latencyMs.toFixed(0)}</td></tr>`,
+    )
+    .join("");
+  const topSlowestSection =
+    m.topSlowestFiles.length > 0
+      ? `
   <h3>Top ${m.topSlowestFiles.length} slowest files (by processing time)</h3>
   <table>
     <tr><th>File</th><th>Latency (ms)</th></tr>
     ${topSlowestRows}
   </table>`
-    : '';
+      : "";
 
   const failuresByBrandRows = m.failureCountByBrand
     .map((e) => `<tr><td>${escapeHtml(e.brand)}</td><td>${e.count}</td></tr>`)
-    .join('');
-  const failuresByBrandSection = m.failureCountByBrand.length > 0
-    ? `
+    .join("");
+  const failuresByBrandSection =
+    m.failureCountByBrand.length > 0
+      ? `
   <h3>Failures by brand (repeated failures)</h3>
   <table>
     <tr><th>Brand</th><th>Failure count</th></tr>
     ${failuresByBrandRows}
   </table>`
-    : '';
+      : "";
 
   const runLabel = formatRunDateTime(m.startedAt);
   return `
   <details class="run-section">
-  <summary class="run-section-summary"><strong>${escapeHtml(runLabel)}</strong> — ${m.success} success, ${m.failed} failed, ${m.skipped} skipped</summary>
+  <summary class="run-section-summary"><strong>${escapeHtml(runLabel)}</strong> — ${displaySuccess} successful responses, ${displayFailed} failed responses, ${m.skipped} skipped</summary>
   <div class="run-section-body">
   <h3>Overview</h3>
   <table>
     <tr><th>Metric</th><th>Value</th></tr>
     <tr><td>Total files</td><td>${m.totalFiles}</td></tr>
-    <tr><td>Success</td><td>${m.success}</td></tr>
-    <tr><td>Failed</td><td>${m.failed}</td></tr>
+    <tr><td>Successful responses</td><td>${displaySuccess}</td></tr>
+    <tr><td>Failed responses</td><td>${displayFailed}</td></tr>
     <tr><td>Skipped</td><td>${m.skipped}</td></tr>
     <tr><td>Run duration (wall clock)</td><td>${runDuration}</td></tr>
     <tr><td>Throughput</td><td>${throughputPerSecond.toFixed(2)} files/sec, ${throughputPerMinute.toFixed(2)} files/min</td></tr>
     <tr><td>Total API time (sum of request latencies)</td><td>${totalApiTime}</td></tr>
-    <tr><td>Error rate</td><td>${(m.errorRate * 100).toFixed(2)}%</td></tr>
+    <tr><td>Error rate</td><td>${(displayErrorRate * 100).toFixed(2)}%</td></tr>
   </table>
   <h3>Load testing / API capability</h3>
   <p>Use these as a guide for batch sizes and expected capacity at similar concurrency and file mix.</p>
@@ -290,7 +422,7 @@ function sectionForRun(entry: HistoricalRunSummary): string {
     <tr><td>Ideal extract count (≈10 min run)</td><td>~${Math.round(throughputPerMinute * 10)} files</td></tr>
     <tr><td>Ideal extract count (≈15 min run)</td><td>~${Math.round(throughputPerMinute * 15)} files</td></tr>
   </table>
-  <p><strong>Summary:</strong> At this run&rsquo;s load, the API handled <strong>${processed} files</strong> in <strong>${runDuration}</strong> with <strong>${(m.errorRate * 100).toFixed(2)}%</strong> errors. For a target run of about 5 minutes, aim for batches of <strong>~${Math.round(throughputPerMinute * 5)} files</strong>; for 10 minutes, <strong>~${Math.round(throughputPerMinute * 10)} files</strong>.</p>
+  <p><strong>Summary:</strong> At this run&rsquo;s load, the API handled <strong>${processed} files</strong> in <strong>${runDuration}</strong> with <strong>${(displayErrorRate * 100).toFixed(2)}%</strong> errors. For a target run of about 5 minutes, aim for batches of <strong>~${Math.round(throughputPerMinute * 5)} files</strong>; for 10 minutes, <strong>~${Math.round(throughputPerMinute * 10)} files</strong>.</p>
   <h3>Latency (ms)</h3>
   <table>
     <tr><th>Percentile</th><th>Value</th></tr>
@@ -310,12 +442,15 @@ function sectionForRun(entry: HistoricalRunSummary): string {
   </details>`;
 }
 
-const REPORT_TITLE = 'EntelliExtract Test Run – Executive Summary';
+const REPORT_TITLE = "EntelliExtract Test Run – Executive Summary";
 
-function htmlReportFromHistory(historicalSummaries: HistoricalRunSummary[], generatedAt: string): string {
+function htmlReportFromHistory(
+  historicalSummaries: HistoricalRunSummary[],
+  generatedAt: string,
+): string {
   const runsHtml = historicalSummaries
     .map((entry) => sectionForRun(entry))
-    .join('');
+    .join("");
   return `<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -338,7 +473,7 @@ function htmlReportFromHistory(historicalSummaries: HistoricalRunSummary[], gene
     .run-section-summary:hover { background: #eee; }
     .run-section-body { padding: 0 0.75rem 0.75rem; }
     .extraction-note { color: #555; font-size: 0.9rem; margin: 0.5rem 0; }
-    td.file-path { word-break: break-all; max-width: 400px; }
+    td.file-path { word-break: break-all; max-width: 700px; }
     .muted { color: #888; font-style: italic; }
   </style>
 </head>
@@ -351,7 +486,10 @@ function htmlReportFromHistory(historicalSummaries: HistoricalRunSummary[], gene
 </html>`;
 }
 
-function htmlReport(summary: ExecutiveSummary, extractionResults: ExtractionResultEntry[] = []): string {
+function htmlReport(
+  summary: ExecutiveSummary,
+  extractionResults: ExtractionResultEntry[] = [],
+): string {
   const single: HistoricalRunSummary = {
     runId: summary.metrics.runId,
     metrics: summary.metrics,
@@ -363,10 +501,10 @@ function htmlReport(summary: ExecutiveSummary, extractionResults: ExtractionResu
 
 function escapeHtml(s: string): string {
   return s
-    .replaceAll('&', '&amp;')
-    .replaceAll('<', '&lt;')
-    .replaceAll('>', '&gt;')
-    .replaceAll('"', '&quot;');
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;");
 }
 
 /**
@@ -375,8 +513,9 @@ function escapeHtml(s: string): string {
  */
 function pruneOldReports(outDir: string, retainCount: number): void {
   if (retainCount <= 0) return;
-  const files = readdirSync(outDir, { withFileTypes: true })
-    .filter((e) => e.isFile() && (e.name.endsWith('.html') || e.name.endsWith('.json')));
+  const files = readdirSync(outDir, { withFileTypes: true }).filter(
+    (e) => e.isFile() && (e.name.endsWith(".html") || e.name.endsWith(".json")),
+  );
   const baseToMtime = new Map<string, number>();
   for (const e of files) {
     const base = basename(e.name, extname(e.name));
@@ -384,13 +523,16 @@ function pruneOldReports(outDir: string, retainCount: number): void {
     try {
       const mtime = statSync(path).mtimeMs;
       const existing = baseToMtime.get(base);
-      if (existing === undefined || mtime > existing) baseToMtime.set(base, mtime);
+      if (existing === undefined || mtime > existing)
+        baseToMtime.set(base, mtime);
     } catch {
       // skip unreadable
     }
   }
   const basesByAge = [...baseToMtime.entries()].sort((a, b) => b[1] - a[1]);
-  const toKeep = new Set(basesByAge.slice(0, retainCount).map(([base]) => base));
+  const toKeep = new Set(
+    basesByAge.slice(0, retainCount).map(([base]) => base),
+  );
   for (const e of files) {
     const base = basename(e.name, extname(e.name));
     if (toKeep.has(base)) continue;
@@ -432,16 +574,22 @@ export function writeReports(config: Config, summary: ExecutiveSummary): void {
 
   if (runId) {
     const base = `report_${runId}_${Date.now()}`;
-    if (config.report.formats.includes('html')) {
+    if (config.report.formats.includes("html")) {
       const path = join(outDir, `${base}.html`);
-      writeFileSync(path, htmlReportFromHistory(historicalSummaries, generatedAt), 'utf-8');
+      writeFileSync(
+        path,
+        htmlReportFromHistory(historicalSummaries, generatedAt),
+        "utf-8",
+      );
     }
-    if (config.report.formats.includes('json')) {
+    if (config.report.formats.includes("json")) {
       const path = join(outDir, `${base}.json`);
       const runsPayload = historicalSummaries.map((r) => {
         const processed = r.metrics.success + r.metrics.failed;
         const throughputPerMinute =
-          r.runDurationSeconds > 0 ? (processed / r.runDurationSeconds) * 60 : 0;
+          r.runDurationSeconds > 0
+            ? (processed / r.runDurationSeconds) * 60
+            : 0;
         const throughputPerSecond = throughputPerMinute / 60;
         return {
           runId: r.runId,
@@ -465,13 +613,17 @@ export function writeReports(config: Config, summary: ExecutiveSummary): void {
           })),
         };
       });
-      const jsonPayload = { title: REPORT_TITLE, generatedAt, runs: runsPayload };
-      writeFileSync(path, JSON.stringify(jsonPayload, null, 2), 'utf-8');
+      const jsonPayload = {
+        title: REPORT_TITLE,
+        generatedAt,
+        runs: runsPayload,
+      };
+      writeFileSync(path, JSON.stringify(jsonPayload, null, 2), "utf-8");
     }
   }
 
   const retain = config.report.retainCount;
-  if (typeof retain === 'number' && retain > 0) {
+  if (typeof retain === "number" && retain > 0) {
     pruneOldReports(outDir, retain);
   }
 }

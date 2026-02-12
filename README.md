@@ -2,6 +2,17 @@
 
 TypeScript test automation for the EntelliExtract spreadsheet extraction API. Supports S3 sync from a single bucket with tenant/purchaser folders, file-level checkpointing (resumable runs), configurable concurrency and rate limiting, full request/response logging, and executive summary reports (Markdown, HTML, JSON).
 
+## Features & capabilities
+
+- **S3 sync to staging**: Syncs from a single S3 bucket with tenant/purchaser folders into a local `output/staging/...` tree, with optional sync limits and SHA-256 based skip-on-checksum.
+- **File-level checkpointing**: Stores status per file (`done`, `error`, `skipped`) in `checkpoint.json` so runs can be resumed without reprocessing completed files.
+- **Configurable load (RPS + concurrency)**: `run.concurrency` and `run.requestsPerSecond` let you simulate different load profiles against the EntelliExtract API.
+- **Full request/response logging**: Writes JSONL logs per run with request, response, headers, and timing for every API call.
+- **Extraction result classification**: For every file, the full extract API JSON response is stored and classified using the response body’s `success` flag (`"success": true` → successful response, `"success": false` → failed response). Upload/read failures are counted as **failed file uploads**.
+- **Executive summary reporting**: Generates Markdown, HTML, and JSON executive summaries with throughput, latency percentiles, error rate, anomaly detection, and per-file extraction results (linked to the stored JSON).
+- **Sync-extract pipeline mode**: Optional `sync-extract` command that syncs and extracts files in a single streaming pipeline (sync one → extract one), useful for incremental runs.
+- **HTML test runner UI**: Browser-based runner that drives the CLI test cases and shows stdout/stderr per scenario.
+
 ## Requirements
 
 - **Node.js** 20+
@@ -48,25 +59,63 @@ TypeScript test automation for the EntelliExtract spreadsheet extraction API. Su
 
 All commands use the config file at `config/config.yaml` unless you pass `-c path/to/config.yaml`. If you just cloned the repo, create it with `cp config/config.example.yaml config/config.yaml` (see Setup).
 
-- **Sync only** – copy files from the S3 bucket (tenant/purchaser folders) to staging. Optionally scope to one tenant and purchaser:
+You can run commands in three equivalent ways (after `npm install`):
+
+- **Recommended (auto-build)** – scripts that *always* compile TypeScript before running:
+
+  ```bash
+  npm run sync      # build + sync
+  npm run extract   # build + run extraction
+  npm run report    # build + report
+  ```
+
+- **Direct CLI (after you have already built once)**:
+
+  ```bash
+  node dist/index.js sync
+  node dist/index.js run
+  node dist/index.js report
+  ```
+
+- **`npm start` passthrough (also assumes you already built)**:
 
   ```bash
   npm start sync
-  npm start sync -- --tenant no-cow-026090539970-prod --purchaser DOT_FOODS
+  npm start run
+  npm start report
+  ```
+
+### Core CLI commands
+
+- **Sync only** – copy files from the S3 bucket (tenant/purchaser folders) to staging. Optionally scope to one tenant and purchaser:
+
+  ```bash
+  npm run sync
+  npm run sync -- --tenant no-cow-026090539970-prod --purchaser DOT_FOODS
   ```
 
 - **Run extraction** – sync (optional) then run the extraction API against staging files. Optionally scope to one tenant/purchaser. Uses checkpointing so you can resume after an interrupt:
 
   ```bash
-  npm start run              # sync + run + write report
-  npm start run -- --no-sync # run only (staging already present)
+  npm run extract                  # build + run (sync + extract + report)
+  npm start run                    # use existing build (sync + extract + report)
+  npm start run -- --no-sync       # run only (staging already present)
   npm start run -- --tenant <tenant> --purchaser <purchaser>
-  npm start run -- --no-report  # run but do not write report
+  npm start run -- --no-report     # run but do not write report
+  ```
+
+- **Sync-extract pipeline** – stream pipeline: sync up to N files and extract each one as soon as it is downloaded:
+
+  ```bash
+  node dist/index.js sync-extract --limit 50
+  node dist/index.js sync-extract --limit 50 --tenant <tenant> --purchaser <purchaser>
+  node dist/index.js sync-extract --limit 50 --resume   # resume from a previous pipeline run
   ```
 
 - **Report** – generate the executive summary from the last run (or a given run ID):
 
   ```bash
+  npm run report
   npm start report
   npm start report -- --run-id run_1234567890_abc123
   ```
@@ -133,14 +182,15 @@ See `output/reports/` for the full executive summary (total files, run time, suc
 | Action | Command |
 |--------|--------|
 | Build only | `npm run build` |
-| Sync S3 → staging | `npm start sync` or `node dist/index.js sync` |
-| Full run (sync + extract + report) | `npm start run` |
+| Sync S3 → staging | `npm run sync` or `node dist/index.js sync` |
+| Full run (sync + extract + report) | `npm run extract` or `npm start run` |
 | Extract only (no sync) | `npm start run -- --no-sync` |
 | Run without writing report | `npm start run -- --no-report` |
-| Report from last run | `npm start report` |
+| Report from last run | `npm run report` or `npm start report` |
 | Report for specific run ID | `npm start report -- --run-id <runId>` |
-| Sync/run for one tenant+purchaser | `npm start sync -- --tenant <tenant> --purchaser <purchaser>` (same for `run`) |
-| Use custom config | `npm start sync -c path/to/config.yaml` (any command) |
+| Sync/run for one tenant+purchaser | `npm run sync -- --tenant <tenant> --purchaser <purchaser>` (same for `run`) |
+| Use custom config | `npm run sync -c path/to/config.yaml` (any command) |
+| Sync-extract pipeline | `node dist/index.js sync-extract --limit <n>` |
 
 ### Prerequisites for testing
 
