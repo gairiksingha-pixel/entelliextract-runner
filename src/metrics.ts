@@ -83,6 +83,16 @@ export function computeMetrics(
   const failureBreakdown = computeFailureBreakdown(failed);
   const topSlowestFiles = computeTopSlowestFiles(done);
   const failureCountByBrand = computeFailureCountByBrand(failed);
+  const failureDetails =
+    failed.length > 0
+      ? failed.map((r) => {
+          let errorMessage: string | undefined = r.errorMessage ?? undefined;
+          if (errorMessage != null && errorMessage.length > 300) {
+            errorMessage = errorMessage.slice(0, 300) + '…';
+          }
+          return { filePath: r.filePath, statusCode: r.statusCode, errorMessage };
+        })
+      : undefined;
 
   return {
     runId,
@@ -106,6 +116,7 @@ export function computeMetrics(
     failureBreakdown,
     topSlowestFiles,
     failureCountByBrand,
+    failureDetails,
   };
 }
 

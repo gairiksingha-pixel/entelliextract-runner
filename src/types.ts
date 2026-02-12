@@ -126,6 +126,8 @@ export interface RunMetrics {
   topSlowestFiles: { filePath: string; latencyMs: number }[];
   /** Failure count per brand (only brands with at least one failure). */
   failureCountByBrand: { brand: string; count: number }[];
+  /** Per-failure API status and message (for debugging 4xx/5xx). */
+  failureDetails?: { filePath: string; statusCode?: number; errorMessage?: string }[];
 }
 
 export interface Anomaly {

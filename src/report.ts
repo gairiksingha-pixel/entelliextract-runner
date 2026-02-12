@@ -135,6 +135,18 @@ function formatDuration(ms: number): string {
   return `${sec}s`;
 }
 
+/** Human-readable date and time for a run (e.g. "2025-02-12 14:30:52") for unique accordion labels. */
+function formatRunDateTime(iso: string): string {
+  const d = new Date(iso);
+  const y = d.getFullYear();
+  const mo = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  const h = String(d.getHours()).padStart(2, '0');
+  const min = String(d.getMinutes()).padStart(2, '0');
+  const s = String(d.getSeconds()).padStart(2, '0');
+  return `${y}-${mo}-${day} ${h}:${min}:${s}`;
+}
+
 export function buildSummary(metrics: RunMetrics): ExecutiveSummary {
   const start = new Date(metrics.startedAt).getTime();
   const end = new Date(metrics.finishedAt).getTime();
@@ -147,7 +159,7 @@ export function buildSummary(metrics: RunMetrics): ExecutiveSummary {
   };
 }
 
-function sectionForRun(entry: HistoricalRunSummary, isFirst: boolean): string {
+function sectionForRun(entry: HistoricalRunSummary): string {
   const m = entry.metrics;
   const wallClockMs = entry.runDurationSeconds * 1000;
   const runDuration = formatDuration(wallClockMs);
@@ -188,6 +200,26 @@ function sectionForRun(entry: HistoricalRunSummary, isFirst: boolean): string {
   </table>`
     : '';
 
+  const failureDetailsRows =
+    (m.failureDetails?.length ?? 0) > 0
+      ? m.failureDetails!
+          .map(
+            (f) =>
+              `<tr><td>${f.statusCode ?? '—'}</td><td class="file-path">${escapeHtml(f.filePath)}</td><td>${escapeHtml((f.errorMessage ?? '').slice(0, 200))}${(f.errorMessage?.length ?? 0) > 200 ? '…' : ''}</td></tr>`
+          )
+          .join('')
+      : '';
+  const failureDetailsSection =
+    failureDetailsRows.length > 0
+      ? `
+  <h3>Failure details (API response)</h3>
+  <p>Use these to debug 4xx/5xx: HTTP status and error body snippet per file.</p>
+  <table>
+    <tr><th>Status</th><th>File</th><th>Message snippet</th></tr>
+    ${failureDetailsRows}
+  </table>`
+      : '';
+
   const topSlowestRows = m.topSlowestFiles
     .map((e) => `<tr><td class="file-path">${escapeHtml(e.filePath)}</td><td>${e.latencyMs.toFixed(0)}</td></tr>`)
     .join('');
@@ -212,10 +244,10 @@ function sectionForRun(entry: HistoricalRunSummary, isFirst: boolean): string {
   </table>`
     : '';
 
-  const openAttr = isFirst ? ' open' : '';
+  const runLabel = formatRunDateTime(m.startedAt);
   return `
-  <details class="run-section"${openAttr}>
-  <summary class="run-section-summary"><strong>Extractions</strong> — ${m.success} success, ${m.failed} failed, ${m.skipped} skipped</summary>
+  <details class="run-section">
+  <summary class="run-section-summary"><strong>${escapeHtml(runLabel)}</strong> — ${m.success} success, ${m.failed} failed, ${m.skipped} skipped</summary>
   <div class="run-section-body">
   <h3>Overview</h3>
   <table>
@@ -250,6 +282,7 @@ function sectionForRun(entry: HistoricalRunSummary, isFirst: boolean): string {
     <tr><td>P99</td><td>${m.p99LatencyMs.toFixed(2)}</td></tr>
   </table>
   ${failureBreakdownSection}
+  ${failureDetailsSection}
   ${topSlowestSection}
   ${failuresByBrandSection}
   <h3>Anomalies</h3>
@@ -263,7 +296,7 @@ const REPORT_TITLE = 'EntelliExtract Test Run – Executive Summary';
 
 function htmlReportFromHistory(historicalSummaries: HistoricalRunSummary[], generatedAt: string): string {
   const runsHtml = historicalSummaries
-    .map((entry, i) => sectionForRun(entry, i === 0))
+    .map((entry) => sectionForRun(entry))
     .join('');
   return `<!DOCTYPE html>
 <html lang="en">

@@ -228,7 +228,9 @@ program
       }
       const stdoutPiped = typeof process !== 'undefined' && process.stdout?.isTTY !== true;
       const limitNum = limit !== undefined && limit > 0 ? limit : 0;
-      if (stdoutPiped && limitNum > 0) process.stdout.write(`SYNC_PROGRESS\t0\t${limitNum}\n`);
+      if (stdoutPiped) {
+        process.stdout.write(`SYNC_PROGRESS\t0\t${limitNum}\n`);
+      }
       if (stdoutPiped) process.stdout.write('EXTRACTION_PROGRESS\t0\t0\n');
       const pipelineConfig = loadConfig(globalOpts.config ?? getConfigPath());
       const result = await runSyncExtractPipeline({
@@ -238,12 +240,11 @@ program
         tenant,
         purchaser,
         pairs,
-        onProgress:
-          stdoutPiped && limitNum > 0
-            ? (done, total) => {
-                process.stdout.write(`SYNC_PROGRESS\t${done}\t${total}\n`);
-              }
-            : undefined,
+        onProgress: stdoutPiped
+          ? (done, total) => {
+              process.stdout.write(`SYNC_PROGRESS\t${done}\t${total}\n`);
+            }
+          : undefined,
         onExtractionProgress: stdoutPiped
           ? (done, total) => {
               process.stdout.write(`EXTRACTION_PROGRESS\t${done}\t${total}\n`);

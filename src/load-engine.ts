@@ -9,7 +9,7 @@ import { join, relative, dirname } from 'node:path';
 import type { Config, CheckpointRecord, S3BucketConfig } from './types.js';
 import { extract, getExtractUploadUrl } from './api-client.js';
 import type { CheckpointDb } from './checkpoint.js';
-import { openCheckpointDb, getOrCreateRunId, getCompletedPaths, createRunIdOnly, upsertCheckpoint, getRecordsForRun, closeCheckpointDb, isCompleted } from './checkpoint.js';
+import { openCheckpointDb, getOrCreateRunId, getCompletedPaths, createRunIdOnly, upsertCheckpoint, getRecordsForRun, closeCheckpointDb } from './checkpoint.js';
 import { initRequestResponseLogger, logRequestResponse, closeRequestResponseLogger } from './logger.js';
 import { getStagingSubdir } from './s3-sync.js';
 
@@ -90,17 +90,10 @@ export async function extractOneFile(
   db: CheckpointDb,
   job: FileJob
 ): Promise<void> {
-  if (isCompleted(db, runId, job.filePath)) {
-    const now = new Date().toISOString();
-    upsertCheckpoint(db, {
-      filePath: job.filePath,
-      relativePath: job.relativePath,
-      brand: job.brand,
-      status: 'skipped',
-      startedAt: now,
-      finishedAt: now,
-      runId,
-    });
+  // Already handled in this run (done or error). Do not re-process or overwrite so the report
+  // counts success/failed correctly.
+  const existingRow = db._data.checkpoints.find((c) => c.file_path === job.filePath && c.run_id === runId);
+  if (existingRow && (existingRow.status === 'done' || existingRow.status === 'error')) {
     return;
   }
 
