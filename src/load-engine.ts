@@ -7,7 +7,7 @@ import PQueue from 'p-queue';
 import { readFileSync, existsSync, readdirSync, mkdirSync, writeFileSync } from 'node:fs';
 import { join, relative, dirname } from 'node:path';
 import type { Config, CheckpointRecord, S3BucketConfig } from './types.js';
-import { extract, getExtractUploadUrl } from './api-client.js';
+import { extract, getExtractUploadUrl, type ExtractResult } from './api-client.js';
 import type { CheckpointDb } from './checkpoint.js';
 import { openCheckpointDb, getOrCreateRunId, getCompletedPaths, createRunIdOnly, upsertCheckpoint, getRecordsForRun, closeCheckpointDb } from './checkpoint.js';
 import { initRequestResponseLogger, logRequestResponse, closeRequestResponseLogger } from './logger.js';
@@ -24,6 +24,62 @@ export interface LoadEngineResult {
   records: CheckpointRecord[];
   startedAt: Date;
   finishedAt: Date;
+}
+
+interface ExtractWithRetryResult {
+  result: ExtractResult;
+  attempts: number;
+}
+
+/**
+ * Call the extract API with simple, configurable retries for transient errors.
+ * Retries on:
+ *   - statusCode === 0 (network/timeout)
+ *   - 5xx responses
+ *   - 429 (rate limit)
+ */
+async function extractWithRetries(
+  config: Config,
+  job: FileJob,
+  bodyBase64: string,
+): Promise<ExtractWithRetryResult> {
+  const maxRetries = Number.isInteger(config.run.maxRetries ?? 0)
+    ? Math.max(0, config.run.maxRetries ?? 0)
+    : 0;
+  const backoffBaseMs = Number.isFinite(config.run.retryBackoffMs ?? 0)
+    ? Math.max(0, config.run.retryBackoffMs ?? 0)
+    : 500;
+
+  let attempt = 0;
+  let last: ExtractResult;
+
+  // Helper to decide if a result is worth retrying.
+  function isRetriable(r: ExtractResult): boolean {
+    if (r.success) return false;
+    const code = r.statusCode;
+    if (code === 0) return true; // network / timeout / abort
+    if (code === 429) return true; // rate limit
+    if (code >= 500 && code < 600) return true; // server errors
+    return false;
+  }
+
+  // eslint-disable-next-line no-constant-condition
+  while (true) {
+    attempt += 1;
+    last = await extract(config, {
+      filePath: job.filePath,
+      fileContentBase64: bodyBase64,
+      brand: job.brand,
+    });
+    if (!isRetriable(last)) break;
+    if (attempt > maxRetries) break;
+    if (backoffBaseMs > 0) {
+      const delay = backoffBaseMs * attempt; // simple linear backoff
+      await new Promise((resolve) => setTimeout(resolve, delay));
+    }
+  }
+
+  return { result: last!, attempts: attempt };
 }
 
 function discoverStagingFiles(stagingDir: string, buckets: S3BucketConfig[]): FileJob[] {
@@ -125,11 +181,7 @@ export async function extractOneFile(
     return;
   }
 
-  const result = await extract(config, {
-    filePath: job.filePath,
-    fileContentBase64: bodyBase64,
-    brand: job.brand,
-  });
+  const { result, attempts } = await extractWithRetries(config, job, bodyBase64);
 
   logRequestResponse({
     runId,
@@ -155,6 +207,13 @@ export async function extractOneFile(
   if (result.body) {
     writeExtractionResult(config, runId, job, result.body);
   }
+  const baseErrorSnippet = result.success ? undefined : result.body.slice(0, 500);
+  const errorMessage =
+    result.success || !baseErrorSnippet
+      ? undefined
+      : attempts > 1
+        ? `${baseErrorSnippet} (after ${attempts} attempt${attempts === 1 ? '' : 's'})`
+        : baseErrorSnippet;
   upsertCheckpoint(db, {
     filePath: job.filePath,
     relativePath: job.relativePath,
@@ -164,7 +223,7 @@ export async function extractOneFile(
     finishedAt: new Date().toISOString(),
     latencyMs: result.latencyMs,
     statusCode: result.statusCode,
-    errorMessage: result.success ? undefined : result.body.slice(0, 500),
+    errorMessage,
     runId,
   });
 }
@@ -279,11 +338,7 @@ export async function runExtraction(
         return;
       }
 
-      const result = await extract(config, {
-        filePath: job.filePath,
-        fileContentBase64: bodyBase64,
-        brand: job.brand,
-      });
+      const { result, attempts } = await extractWithRetries(config, job, bodyBase64);
 
       logRequestResponse({
         runId: runIdToUse,
@@ -309,6 +364,13 @@ export async function runExtraction(
       if (result.body) {
         writeExtractionResult(config, runIdToUse, job, result.body);
       }
+      const baseErrorSnippet = result.success ? undefined : result.body.slice(0, 500);
+      const errorMessage =
+        result.success || !baseErrorSnippet
+          ? undefined
+          : attempts > 1
+            ? `${baseErrorSnippet} (after ${attempts} attempt${attempts === 1 ? '' : 's'})`
+            : baseErrorSnippet;
       upsertCheckpoint(db, {
         filePath: job.filePath,
         relativePath: job.relativePath,
@@ -318,7 +380,7 @@ export async function runExtraction(
         finishedAt: new Date().toISOString(),
         latencyMs: result.latencyMs,
         statusCode: result.statusCode,
-        errorMessage: result.success ? undefined : result.body.slice(0, 500),
+        errorMessage,
         runId: runIdToUse,
       });
     }).finally(() => {

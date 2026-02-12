@@ -32,6 +32,10 @@ export interface RunConfig {
   requestsPerSecond: number;
   checkpointPath: string;
   skipCompleted: boolean;
+  /** Max number of retries per file when the API call fails with timeout/5xx/429. Default: 0 (no retries). */
+  maxRetries?: number;
+  /** Base delay in milliseconds between retries (simple linear backoff). Default: 500ms. */
+  retryBackoffMs?: number;
 }
 
 export interface LoggingConfig {

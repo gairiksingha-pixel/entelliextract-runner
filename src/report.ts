@@ -394,6 +394,41 @@ function sectionForRun(entry: HistoricalRunSummary): string {
   </table>`
       : "";
 
+  // Lightweight "agent-style" summary: highlight top anomalies and hotspots.
+  const agentSummaryPoints: string[] = [];
+  if (displayFailed > 0) {
+    agentSummaryPoints.push(
+      `Error rate is ${(displayErrorRate * 100).toFixed(2)}% with ${displayFailed} failed responses.`,
+    );
+  }
+  if (m.failureCountByBrand.length > 0) {
+    const topBrand = m.failureCountByBrand[0];
+    agentSummaryPoints.push(
+      `Most failures are for brand "${topBrand.brand}" (${topBrand.count} failed file${
+        topBrand.count === 1 ? "" : "s"
+      }).`,
+    );
+  }
+  const highLatency = m.anomalies.filter((a) => a.type === "high_latency");
+  if (highLatency.length > 0) {
+    agentSummaryPoints.push(
+      `${highLatency.length} file${
+        highLatency.length === 1 ? "" : "s"
+      } exceeded 2× P95 latency (${m.p95LatencyMs.toFixed(0)}ms).`,
+    );
+  }
+  if (agentSummaryPoints.length === 0 && processed > 0) {
+    agentSummaryPoints.push(
+      `Run completed without notable anomalies: ${processed} files in ${runDuration} at ${(throughputPerMinute).toFixed(1)} files/min.`,
+    );
+  }
+  const agentSummaryHtml =
+    agentSummaryPoints.length > 0
+      ? `<ul>${agentSummaryPoints
+          .map((p) => `<li>${escapeHtml(p)}</li>`)
+          .join("")}</ul>`
+      : '<p class="muted">No notable anomalies detected.</p>';
+
   const runLabel = formatRunDateTime(m.startedAt);
   return `
   <details class="run-section">
@@ -431,6 +466,8 @@ function sectionForRun(entry: HistoricalRunSummary): string {
     <tr><td>P95</td><td>${m.p95LatencyMs.toFixed(2)}</td></tr>
     <tr><td>P99</td><td>${m.p99LatencyMs.toFixed(2)}</td></tr>
   </table>
+  <h3>Automated summary</h3>
+  ${agentSummaryHtml}
   ${failureBreakdownSection}
   ${failureDetailsSection}
   ${topSlowestSection}

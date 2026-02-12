@@ -27,6 +27,9 @@ run:
   requestsPerSecond: 10
   checkpointPath: ./output/checkpoints/checkpoint.db
   skipCompleted: true
+  # Optional: API retry settings (for timeouts/5xx/429). Defaults: maxRetries=0, retryBackoffMs=500.
+  maxRetries: 2
+  retryBackoffMs: 500
 
 # Logging
 logging:
