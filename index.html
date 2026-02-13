@@ -2288,6 +2288,60 @@
       });
 
       (function restoreAllCasesOnLoad() {
+        function pollScheduledRun(caseId, row, resultDiv, resetBtn, runBtn) {
+          setTimeout(function () {
+            fetch("/api/active-runs")
+              .then(function (r) {
+                return r.json();
+              })
+              .then(function (data) {
+                var run =
+                  data.activeRuns &&
+                  data.activeRuns.find(function (r) {
+                    return r.caseId === caseId && r.origin === "scheduled";
+                  });
+                if (run) {
+                  // Update progress
+                  if (resultDiv) {
+                    showResult(
+                      resultDiv,
+                      null,
+                      false,
+                      run.progress,
+                      run.syncProgress,
+                      run.extractProgress,
+                      caseId,
+                      null,
+                      null,
+                    );
+                  }
+                  // Schedule next poll
+                  pollScheduledRun(caseId, row, resultDiv, resetBtn, runBtn);
+                } else {
+                  // Run finished
+                  if (resetBtn) {
+                    resetBtn.textContent = "Reset";
+                    resetBtn.classList.remove("stop-btn");
+                    resetBtn.disabled = false;
+                    resetBtn.onclick = function () {
+                      resetCase(resultDiv);
+                    };
+                  }
+                  if (runBtn) runBtn.disabled = false;
+                  setOtherRowsActive();
+                  if (resultDiv) {
+                    resultDiv.className = "result result-placeholder";
+                    resultDiv.innerHTML =
+                      '<span class="result-placeholder-text">Select at least one brand or purchaser in the filter above, then click Run.</span>';
+                  }
+                }
+              })
+              .catch(function () {
+                // Retry on error
+                pollScheduledRun(caseId, row, resultDiv, resetBtn, runBtn);
+              });
+          }, 2000);
+        }
         // Step 1: Check for actively running processes
         fetch("/api/active-runs")
           .then(function (r) {
@@ -2312,13 +2366,7 @@
 
               // Handle Scheduled Runs (Non-blocking)
               if (run.origin === "scheduled") {
-                // Show just a "Running in background" chip in the output cell — no stop button here
-                if (resultDiv) {
-                  resultDiv.className = "result result-placeholder";
-                  resultDiv.innerHTML =
-                    '<span style="background:#e0f2f1;color:#00695c;padding:3px 10px;border-radius:14px;font-size:0.85em;font-weight:600;border:1px solid #b2dfdb;white-space:nowrap;">Running in background</span>';
-                }
-                // Move "Stop Auto Extraction" to the actions column (resetBtn)
+                // Setup buttons for background job
                 if (resetBtn) {
                   resetBtn.textContent = "Stop Auto Extraction";
                   resetBtn.classList.remove("resume-btn");
@@ -2332,6 +2380,35 @@
                   caseRow,
                   "Background auto extraction is running. Stop it to run another case.",
                 );
+
+                // Show initial progress and start polling
+                if (resultDiv) {
+                  // Initial render with data we already have
+                  if (run.progress || run.syncProgress || run.extractProgress) {
+                    showResult(
+                      resultDiv,
+                      null,
+                      false,
+                      run.progress,
+                      run.syncProgress,
+                      run.extractProgress,
+                      run.caseId,
+                    );
+                  } else {
+                    resultDiv.className = "result result-placeholder";
+                    resultDiv.innerHTML =
+                      '<span style="background:#e0f2f1;color:#00695c;padding:3px 10px;border-radius:14px;font-size:0.85em;font-weight:600;border:1px solid #b2dfdb;white-space:nowrap;">Initializing background run...</span>';
+                  }
+                }
+
+                pollScheduledRun(
+                  run.caseId,
+                  caseRow,
+                  resultDiv,
+                  resetBtn,
+                  runBtn,
+                );
+
                 return; // processing done for scheduled run
               }
 

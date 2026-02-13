@@ -721,6 +721,15 @@ function registerScheduleJob(schedule) {
             onChild: (child) => {
               CHILD_PROCESSES.set(activeRunKey, child);
             },
+            onProgress: (percent, done, total) => {
+              runInfo.progress = { percent, done, total };
+            },
+            onSyncProgress: (done, total) => {
+              runInfo.syncProgress = { done, total };
+            },
+            onExtractionProgress: (done, total) => {
+              runInfo.extractProgress = { done, total };
+            },
           },
           null,
         );
