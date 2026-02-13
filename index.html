@@ -73,7 +73,7 @@
       .header-inner {
         max-width: 100%;
         margin: 0;
-        padding: 0.425rem 1.062rem 0.085rem 1.062rem;
+        padding: 0.637rem 1.275rem 0.425rem 1.275rem;
         box-sizing: border-box;
         display: flex;
         align-items: center;
@@ -88,7 +88,7 @@
         justify-content: center;
         gap: 0;
         flex-shrink: 0;
-        padding-top: 0.637rem;
+        padding-top: 0;
       }
       .header-filter-row {
         display: flex;
@@ -882,10 +882,14 @@
         border-radius: var(--radius);
         box-shadow: var(--shadow-lg);
         border: 0.85px solid var(--border);
-        max-width: 760px;
-        width: 760px;
+        width: 800px;
+        max-width: 90vw;
+        height: 650px;
+        max-height: 85vh;
         padding: 1.062rem 1.275rem 0.85rem;
         box-sizing: border-box;
+        display: flex;
+        flex-direction: column;
       }
       .modal-header {
         display: flex;
@@ -913,10 +917,12 @@
         color: var(--fail);
       }
       .modal-body {
-        max-height: 460px;
+        flex: 1;
         overflow-y: auto;
         font-size: 0.85rem;
         color: var(--text-secondary);
+        display: flex;
+        flex-direction: column;
       }
       .modal-footer {
         margin-top: 0.85rem;
@@ -952,6 +958,12 @@
       }
       .schedule-empty {
         color: var(--muted);
+        text-align: center;
+        padding: 2rem 1rem;
+        flex: 1;
+        display: flex;
+        align-items: center;
+        justify-content: center;
       }
       .schedule-list {
         width: 100%;
@@ -1099,7 +1111,7 @@
                 class="header-btn-reset"
                 title="Clear brand and purchaser filter"
               >
-                Reset filter
+                Reset Filter
               </button>
             </div>
           </div>
@@ -1128,7 +1140,12 @@
     </main>
 
     <div id="schedule-modal-overlay" class="modal-overlay" aria-hidden="true">
-      <div class="modal" role="dialog" aria-modal="true" aria-labelledby="schedule-modal-title">
+      <div
+        class="modal"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="schedule-modal-title"
+      >
         <div class="modal-header">
           <div class="modal-title" id="schedule-modal-title">
             Schedule automatic sync &amp; extraction
@@ -1555,9 +1572,7 @@
               rows.push(["Staging path", parsed.stagingPaths.join("\n")]);
             var overview = [];
             if (parsed.downloadedNew != null)
-              overview.push(
-                "Downloaded: " + escapeHtml(parsed.downloadedNew),
-              );
+              overview.push("Downloaded: " + escapeHtml(parsed.downloadedNew));
             if (parsed.skipped != null) {
               var skippedLabel = escapeHtml(parsed.skipped);
               var skippedHtml =
@@ -2308,7 +2323,7 @@
         var scheduleBtn = document.createElement("button");
         scheduleBtn.type = "button";
         scheduleBtn.textContent = "Schedule Extraction";
-        scheduleBtn.className = "download-report-btn download-report-html-btn";
+        scheduleBtn.className = "header-btn-reset";
         scheduleBtn.style.marginLeft = "auto";
         scheduleBtn.onclick = function () {
           openScheduleModal();
@@ -2533,17 +2548,24 @@
       function renderScheduleListView(state) {
         var body = document.getElementById("schedule-modal-body");
         if (!body) return;
-        var schedules = state && Array.isArray(state.schedules) ? state.schedules : [];
+        var schedules =
+          state && Array.isArray(state.schedules) ? state.schedules : [];
         var tz = state && Array.isArray(state.timezones) ? state.timezones : [];
         var html =
-          '<div class="schedule-header-row"><div>Manage scheduled sync &amp; extraction jobs.</div><div style="display:flex;gap:0.51rem;flex-wrap:wrap;"><button type="button" id="schedule-history-btn" class="btn-secondary">History</button><button type="button" id="schedule-create-btn" class="download-report-btn download-report-html-btn">Create a Schedule</button></div></div>';
+          '<div class="schedule-header-row"><div>Manage scheduled sync &amp; extraction jobs.</div><div style="display:flex;gap:0.51rem;flex-wrap:wrap;"><button type="button" id="schedule-history-btn" class="btn-secondary">History</button><button type="button" id="schedule-create-btn" class="download-report-btn download-report-html-btn">Create a Schedule</button></div></div><div style="flex:1;display:flex;flex-direction:column;min-height:0;">';
         if (!schedules.length) {
-          html += '<div class="schedule-empty">No schedules created. Please create a schedule.</div>';
+          html +=
+            '<div class="schedule-empty">No schedules created. Please create a schedule.</div>';
         } else {
-          html += '<table class="schedule-list"><thead><tr><th>Brand filter</th><th>Purchaser filter</th><th>Time (cron)</th><th>Timezone</th><th>Created</th><th>Actions</th></tr></thead><tbody>';
+          html +=
+            '<div style="flex:1;overflow-y:auto;"><table class="schedule-list"><thead><tr><th>Brand</th><th>Purchaser</th><th>Time (cron)</th><th>Timezone</th><th>Created</th><th>Actions</th></tr></thead><tbody>';
           schedules.forEach(function (s) {
-            var brands = (s.brands && s.brands.length ? s.brands.join(", ") : "All");
-            var purchasers = (s.purchasers && s.purchasers.length ? s.purchasers.join(", ") : "All");
+            var brands =
+              s.brands && s.brands.length ? s.brands.join(", ") : "All";
+            var purchasers =
+              s.purchasers && s.purchasers.length
+                ? s.purchasers.join(", ")
+                : "All";
             html +=
               "<tr data-sched-id='" +
               escapeHtml(s.id || "") +
@@ -2557,13 +2579,14 @@
               escapeHtml(s.timezone) +
               "</td><td>" +
               escapeHtml(s.createdAt || "") +
-              "</td><td>" +
-              '<button type="button" class="btn-secondary" data-sched-edit>Edit</button> ' +
+              "</td><td><div style=\"display:flex;flex-wrap:wrap;gap:0.51rem;\">" +
+              '<button type="button" class="btn-secondary" data-sched-edit>Edit</button>' +
               '<button type="button" class="btn-secondary" data-sched-delete>Delete</button>' +
-              "</td></tr>";
+              "</div></td></tr>";
           });
-          html += "</tbody></table>";
+          html += "</tbody></table></div>";
         }
+        html += "</div>";
         body.innerHTML = html;
         var createBtn = document.getElementById("schedule-create-btn");
         if (createBtn) {
@@ -2594,32 +2617,107 @@
             var tr = btn.closest("tr");
             var id = tr && tr.getAttribute("data-sched-id");
             if (!id) return;
-            if (!window.confirm("Delete this schedule? This cannot be undone.")) return;
+            if (!window.confirm("Delete this schedule? This cannot be undone."))
+              return;
             deleteSchedule(id);
           });
         });
       }
 
+      function getSelectedScheduleBrands() {
+        var panel = document.getElementById("sched-brand-dropdown-panel");
+        if (!panel) return [];
+        return Array.from(
+          panel.querySelectorAll("input[type=checkbox]:checked"),
+        ).map(function (cb) {
+          return cb.value;
+        });
+      }
+      function getSelectedSchedulePurchasers() {
+        var panel = document.getElementById("sched-purchaser-dropdown-panel");
+        if (!panel) return [];
+        return Array.from(
+          panel.querySelectorAll("input[type=checkbox]:checked"),
+        ).map(function (cb) {
+          return cb.value;
+        });
+      }
+      function updateScheduleDropdownTrigger(type) {
+        var trigger = document.getElementById(
+          type === "brand"
+            ? "sched-brand-dropdown-trigger"
+            : "sched-purchaser-dropdown-trigger",
+        );
+        if (!trigger) return;
+        var selected =
+          type === "brand"
+            ? getSelectedScheduleBrands()
+            : getSelectedSchedulePurchasers();
+        if (selected.length === 0) {
+          trigger.textContent =
+            type === "brand" ? "Select brand" : "Select purchaser";
+        } else if (selected.length === 1) {
+          trigger.textContent = selected[0];
+        } else {
+          trigger.textContent = selected.length + " selected";
+        }
+      }
+      function refreshSchedulePurchaserOptions() {
+        var panel = document.getElementById("sched-purchaser-dropdown-panel");
+        var trigger = document.getElementById("sched-purchaser-dropdown-trigger");
+        if (!panel || !trigger) return;
+        var brands = getSelectedScheduleBrands();
+        var opts =
+          brands.length === 0
+            ? ALL_PURCHASERS
+            : (function () {
+                var set = new Set();
+                brands.forEach(function (b) {
+                  (BRAND_PURCHASERS[b] || []).forEach(function (p) {
+                    set.add(p);
+                  });
+                });
+                return Array.from(set).sort();
+              })();
+        var currentChecked = getSelectedSchedulePurchasers();
+        panel.innerHTML = opts
+          .map(function (p) {
+            var checked = currentChecked.indexOf(p) !== -1 ? " checked" : "";
+            return (
+              '<label class="filter-dropdown-option"><input type="checkbox" value="' +
+              escapeHtml(p) +
+              '"' +
+              checked +
+              "> " +
+              escapeHtml(p) +
+              "</label>"
+            );
+          })
+          .join("");
+        panel.querySelectorAll("input[type=checkbox]").forEach(function (cb) {
+          cb.addEventListener("change", function () {
+            updateScheduleDropdownTrigger("purchaser");
+          });
+        });
+        updateScheduleDropdownTrigger("purchaser");
+      }
       function renderScheduleCreateForm(timezones, schedule) {
         var body = document.getElementById("schedule-modal-body");
         if (!body) return;
         var brands = Object.keys(BRAND_PURCHASERS || {});
-        var purchasers = ALL_PURCHASERS || [];
-        var tz = Array.isArray(timezones) && timezones.length ? timezones : ["UTC"];
-        var brandOptions =
-          '<option value="">All brands</option>' +
-          brands
-            .map(function (b) {
-              return '<option value="' + escapeHtml(b) + '">' + escapeHtml(b) + "</option>";
-            })
-            .join("");
-        var purchaserOptions =
-          '<option value="">All purchasers</option>' +
-          purchasers
-            .map(function (p) {
-              return '<option value="' + escapeHtml(p) + '">' + escapeHtml(p) + "</option>";
-            })
-            .join("");
+        var tz =
+          Array.isArray(timezones) && timezones.length ? timezones : ["UTC"];
+        var brandOptions = brands
+          .map(function (b) {
+            return (
+              '<label class="filter-dropdown-option"><input type="checkbox" value="' +
+              escapeHtml(b) +
+              '"> ' +
+              escapeHtml(b) +
+              "</label>"
+            );
+          })
+          .join("");
         var cronOptions = "";
         for (var h = 0; h < 24; h++) {
           for (var m = 0; m < 60; m++) {
@@ -2629,25 +2727,34 @@
             var label = displayHour + ":" + minLabel + " " + ampm;
             var cronVal = String(m) + " " + String(h) + " * * *";
             cronOptions +=
-              '<option value="' + cronVal + '">' + escapeHtml(label) + "</option>";
+              '<option value="' +
+              cronVal +
+              '">' +
+              escapeHtml(label) +
+              "</option>";
           }
         }
         var tzOptions = tz
           .map(function (z) {
-            return '<option value="' + escapeHtml(z) + '">' + escapeHtml(z) + "</option>";
+            return (
+              '<option value="' +
+              escapeHtml(z) +
+              '">' +
+              escapeHtml(z) +
+              "</option>"
+            );
           })
           .join("");
         body.innerHTML =
           '<div class="schedule-header-row"><div>' +
           (schedule ? "Edit schedule." : "Create a new schedule.") +
           "</div></div>" +
+          '<div style="flex:1;display:flex;flex-direction:column;min-height:0;overflow-y:auto;">' +
           '<div class="schedule-form-grid">' +
-          '<div class="schedule-field"><label class="schedule-label" for="sched-brand">Brand (optional)</label><select id="sched-brand" class="schedule-select">' +
+          '<div class="schedule-field"><label class="schedule-label" for="sched-brand-dropdown-trigger">Brand (optional)</label><div id="sched-brand-dropdown" class="filter-dropdown"><button type="button" id="sched-brand-dropdown-trigger" class="filter-dropdown-trigger" aria-haspopup="listbox" aria-expanded="false" title="Select one or more brands">Select brand</button><div id="sched-brand-dropdown-panel" class="filter-dropdown-panel" role="listbox">' +
           brandOptions +
-          '</select><div class="schedule-hint">Leave empty to include all brands.</div></div>' +
-          '<div class="schedule-field"><label class="schedule-label" for="sched-purchaser">Purchaser (optional)</label><select id="sched-purchaser" class="schedule-select">' +
-          purchaserOptions +
-          '</select><div class="schedule-hint">Leave empty to include all purchasers.</div></div>' +
+          '</div></div><div class="schedule-hint">Leave empty to include all brands.</div></div>' +
+          '<div class="schedule-field"><label class="schedule-label" for="sched-purchaser-dropdown-trigger">Purchaser (optional)</label><div id="sched-purchaser-dropdown" class="filter-dropdown"><button type="button" id="sched-purchaser-dropdown-trigger" class="filter-dropdown-trigger" aria-haspopup="listbox" aria-expanded="false" title="Select one or more purchasers">Select purchaser</button><div id="sched-purchaser-dropdown-panel" class="filter-dropdown-panel" role="listbox"></div></div><div class="schedule-hint">Leave empty to include all purchasers. Options update based on selected brands.</div></div>' +
           '<div class="schedule-field"><label class="schedule-label" for="sched-cron">Run time (daily)</label><select id="sched-cron" class="schedule-select">' +
           cronOptions +
           '</select><div class="schedule-hint">Runs once per day at the selected time (every minute interval options).</div></div>' +
@@ -2656,9 +2763,62 @@
           '</select><div class="schedule-hint">All runs use this timezone for the cron schedule.</div></div>' +
           "</div>" +
           '<div id="schedule-error" class="schedule-error"></div>' +
+          "</div>" +
           '<div class="modal-footer" style="margin-top:0.85rem;"><button type="button" id="schedule-cancel-btn" class="btn-secondary">Cancel</button><button type="button" id="schedule-save-btn" class="download-report-btn download-report-html-btn">' +
           (schedule ? "Update schedule" : "Save schedule") +
           "</button></div>";
+        refreshSchedulePurchaserOptions();
+        var brandTrigger = document.getElementById("sched-brand-dropdown-trigger");
+        var brandPanel = document.getElementById("sched-brand-dropdown-panel");
+        var brandDropdown = document.getElementById("sched-brand-dropdown");
+        var purchaserTrigger = document.getElementById("sched-purchaser-dropdown-trigger");
+        var purchaserPanel = document.getElementById("sched-purchaser-dropdown-panel");
+        var purchaserDropdown = document.getElementById("sched-purchaser-dropdown");
+        function closeScheduleDropdowns() {
+          if (brandPanel) brandPanel.classList.remove("open");
+          if (purchaserPanel) purchaserPanel.classList.remove("open");
+          if (brandTrigger) brandTrigger.setAttribute("aria-expanded", "false");
+          if (purchaserTrigger) purchaserTrigger.setAttribute("aria-expanded", "false");
+        }
+        function toggleScheduleDropdown(panel, trigger) {
+          var isOpen = panel && panel.classList.contains("open");
+          closeScheduleDropdowns();
+          if (!isOpen && panel && trigger) {
+            panel.classList.add("open");
+            trigger.setAttribute("aria-expanded", "true");
+          }
+        }
+        if (brandTrigger && brandPanel) {
+          brandTrigger.addEventListener("click", function (e) {
+            e.stopPropagation();
+            toggleScheduleDropdown(brandPanel, brandTrigger);
+          });
+        }
+        if (purchaserTrigger && purchaserPanel) {
+          purchaserTrigger.addEventListener("click", function (e) {
+            e.stopPropagation();
+            toggleScheduleDropdown(purchaserPanel, purchaserTrigger);
+          });
+        }
+        if (brandDropdown) {
+          brandDropdown.addEventListener("click", function (e) {
+            e.stopPropagation();
+          });
+        }
+        if (purchaserDropdown) {
+          purchaserDropdown.addEventListener("click", function (e) {
+            e.stopPropagation();
+          });
+        }
+        document.addEventListener("click", function () {
+          closeScheduleDropdowns();
+        });
+        brandPanel.querySelectorAll("input[type=checkbox]").forEach(function (cb) {
+          cb.addEventListener("change", function () {
+            updateScheduleDropdownTrigger("brand");
+            refreshSchedulePurchaserOptions();
+          });
+        });
         var cancelBtn = document.getElementById("schedule-cancel-btn");
         if (cancelBtn) {
           cancelBtn.onclick = function () {
@@ -2672,15 +2832,22 @@
           };
         }
         if (schedule) {
-          var brandEl = document.getElementById("sched-brand");
-          var purchaserEl = document.getElementById("sched-purchaser");
           var cronEl = document.getElementById("sched-cron");
           var tzEl = document.getElementById("sched-tz");
-          if (brandEl && schedule.brands && schedule.brands.length) {
-            brandEl.value = schedule.brands[0];
+          if (schedule.brands && schedule.brands.length) {
+            schedule.brands.forEach(function (b) {
+              var cb = brandPanel.querySelector('input[type=checkbox][value="' + escapeHtml(b) + '"]');
+              if (cb) cb.checked = true;
+            });
+            updateScheduleDropdownTrigger("brand");
+            refreshSchedulePurchaserOptions();
           }
-          if (purchaserEl && schedule.purchasers && schedule.purchasers.length) {
-            purchaserEl.value = schedule.purchasers[0];
+          if (schedule.purchasers && schedule.purchasers.length) {
+            schedule.purchasers.forEach(function (p) {
+              var cb = purchaserPanel.querySelector('input[type=checkbox][value="' + escapeHtml(p) + '"]');
+              if (cb) cb.checked = true;
+            });
+            updateScheduleDropdownTrigger("purchaser");
           }
           if (cronEl && schedule.cron) {
             cronEl.value = schedule.cron;
@@ -2718,50 +2885,78 @@
           })
           .then(function (list) {
             var html =
-              '<div class="schedule-header-row"><div>Reports history</div><button type="button" id="history-back-btn" class="btn-secondary">Back to Schedules</button></div>';
+              '<div class="schedule-header-row"><div>Reports history</div><button type="button" id="history-back-btn" class="btn-secondary">Back to Schedules</button></div>' +
+              '<div style="flex:1;display:flex;flex-direction:column;min-height:0;">';
             html +=
               '<div style="margin-bottom:0.85rem;display:flex;flex-wrap:wrap;gap:0.51rem;">' +
               '<button type="button" id="history-latest-summary" class="download-report-btn download-report-html-btn">Latest summary (HTML)</button>' +
-              '<button type="button" id="history-latest-summary-json" class="download-report-btn download-report-json-btn">Latest summary (JSON)</button>' +
               '<button type="button" id="history-extractions-zip" class="download-report-btn download-report-json-btn">Latest extractions ZIP</button>' +
               "</div>";
-            var items = [];
+            var runMap = {};
+            function extractRunId(filename) {
+              var match = filename.match(/^report_(.+?)_\d+\.(html|json)$/);
+              return match ? match[1] : null;
+            }
             (list.html || []).forEach(function (r) {
-              items.push({
-                name: r.name,
-                mtime: r.mtime || 0,
-                type: "Summary (HTML)",
-              });
+              var runId = extractRunId(r.name);
+              if (runId) {
+                if (!runMap[runId] || (r.mtime || 0) < (runMap[runId].mtime || 0)) {
+                  runMap[runId] = {
+                    runId: runId,
+                    mtime: r.mtime || 0,
+                    htmlName: r.name,
+                    jsonName: null,
+                  };
+                } else if (runMap[runId]) {
+                  runMap[runId].htmlName = r.name;
+                  if ((r.mtime || 0) < (runMap[runId].mtime || 0)) {
+                    runMap[runId].mtime = r.mtime || 0;
+                  }
+                }
+              }
             });
             (list.json || []).forEach(function (r) {
-              items.push({
-                name: r.name,
-                mtime: r.mtime || 0,
-                type: "Summary (JSON)",
-              });
+              var runId = extractRunId(r.name);
+              if (runId) {
+                if (!runMap[runId]) {
+                  runMap[runId] = {
+                    runId: runId,
+                    mtime: r.mtime || 0,
+                    htmlName: null,
+                    jsonName: r.name,
+                  };
+                } else {
+                  runMap[runId].jsonName = r.name;
+                  if ((r.mtime || 0) < (runMap[runId].mtime || 0)) {
+                    runMap[runId].mtime = r.mtime || 0;
+                  }
+                }
+              }
             });
+            var items = Object.values(runMap);
             items.sort(function (a, b) {
               return (b.mtime || 0) - (a.mtime || 0);
             });
             if (!items.length) {
-              html += '<div class="schedule-empty">No reports available yet. Run or schedule an extraction to generate reports.</div>';
+              html +=
+                '<div class="schedule-empty">No reports available yet. Run or schedule an extraction to generate reports.</div>';
             } else {
-              html += '<table class="schedule-list"><thead><tr><th>Name</th><th>Type</th><th>Modified</th></tr></thead><tbody>';
+              html +=
+                '<div style="flex:1;overflow-y:auto;"><table class="schedule-list"><thead><tr><th>Run ID</th><th>Executed At</th></tr></thead><tbody>';
               items.forEach(function (it) {
                 var dateLabel = it.mtime
                   ? new Date(it.mtime).toLocaleString()
                   : "";
                 html +=
                   "<tr><td>" +
-                  escapeHtml(it.name) +
-                  "</td><td>" +
-                  escapeHtml(it.type) +
+                  escapeHtml(it.runId) +
                   "</td><td>" +
                   escapeHtml(dateLabel) +
                   "</td></tr>";
               });
-              html += "</tbody></table>";
+              html += "</tbody></table></div>";
             }
+            html += "</div>";
             body.innerHTML = html;
             var backBtn = document.getElementById("history-back-btn");
             if (backBtn) {
@@ -2775,14 +2970,6 @@
             if (latestSummaryBtn) {
               latestSummaryBtn.onclick = function () {
                 downloadLatestReport(latestSummaryBtn, "html");
-              };
-            }
-            var latestSummaryJsonBtn = document.getElementById(
-              "history-latest-summary-json",
-            );
-            if (latestSummaryJsonBtn) {
-              latestSummaryJsonBtn.onclick = function () {
-                downloadLatestReport(latestSummaryJsonBtn, "json");
               };
             }
             var extractionsZipBtn = document.getElementById(
@@ -2822,19 +3009,18 @@
       }
 
       function submitScheduleForm(schedule) {
-        var brandEl = document.getElementById("sched-brand");
-        var purchaserEl = document.getElementById("sched-purchaser");
         var cronEl = document.getElementById("sched-cron");
         var tzEl = document.getElementById("sched-tz");
         var errorEl = document.getElementById("schedule-error");
-        if (!brandEl || !purchaserEl || !cronEl || !tzEl || !errorEl) return;
-        var brand = (brandEl.value || "").trim();
-        var purchaser = (purchaserEl.value || "").trim();
+        if (!cronEl || !tzEl || !errorEl) return;
+        var brands = getSelectedScheduleBrands();
+        var purchasers = getSelectedSchedulePurchasers();
         var cron = (cronEl.value || "").trim();
         var timezone = (tzEl.value || "").trim();
         errorEl.textContent = "";
-        if (!brand && !purchaser) {
-          errorEl.textContent = "Please select at least one brand or purchaser.";
+        if (brands.length === 0 && purchasers.length === 0) {
+          errorEl.textContent =
+            "Please select at least one brand or purchaser.";
           return;
         }
         if (!cron) {
@@ -2855,8 +3041,8 @@
           method: method,
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
-            brands: brand ? [brand] : [],
-            purchasers: purchaser ? [purchaser] : [],
+            brands: brands,
+            purchasers: purchasers,
             cron: cron,
             timezone: timezone,
           }),
@@ -2864,7 +3050,9 @@
           .then(function (r) {
             if (!r.ok) {
               return r.json().then(function (err) {
-                throw new Error(err && err.error ? err.error : "Failed to save schedule");
+                throw new Error(
+                  err && err.error ? err.error : "Failed to save schedule",
+                );
               });
             }
             return r.json();
@@ -2873,7 +3061,8 @@
             loadSchedulesIntoModal();
           })
           .catch(function (e) {
-            errorEl.textContent = e && e.message ? e.message : "Failed to save schedule.";
+            errorEl.textContent =
+              e && e.message ? e.message : "Failed to save schedule.";
           });
       }
       function clearResumeStateFromAllRows() {

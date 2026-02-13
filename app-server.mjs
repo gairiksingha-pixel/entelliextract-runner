@@ -86,12 +86,7 @@ const LAST_RUN_COMPLETED_PATH = join(
 );
 const ALLOWED_EXT = new Set([".html", ".json"]);
 
-const SCHEDULES_PATH = join(
-  ROOT,
-  "output",
-  "checkpoints",
-  "schedules.json",
-);
+const SCHEDULES_PATH = join(ROOT, "output", "checkpoints", "schedules.json");
 
 function loadSchedules() {
   if (!existsSync(SCHEDULES_PATH)) return [];
@@ -177,9 +172,10 @@ function appendScheduleLog(entry) {
   try {
     const dir = dirname(SCHEDULE_LOG_PATH);
     if (!existsSync(dir)) mkdirSync(dir, { recursive: true });
-    const line = JSON.stringify(
-      { timestamp: new Date().toISOString(), ...entry },
-    );
+    const line = JSON.stringify({
+      timestamp: new Date().toISOString(),
+      ...entry,
+    });
     writeFileSync(SCHEDULE_LOG_PATH, line + "\n", {
       encoding: "utf-8",
       flag: "a",
@@ -828,7 +824,9 @@ createServer(async (req, res) => {
     try {
       const list = loadSchedules();
       res.writeHead(200, { "Content-Type": "application/json" });
-      res.end(JSON.stringify({ schedules: list, timezones: SCHEDULE_TIMEZONES }));
+      res.end(
+        JSON.stringify({ schedules: list, timezones: SCHEDULE_TIMEZONES }),
+      );
     } catch (e) {
       res.writeHead(500, { "Content-Type": "application/json" });
       res.end(JSON.stringify({ error: String(e.message) }));
@@ -839,9 +837,12 @@ createServer(async (req, res) => {
     let body = "";
     for await (const chunk of req) body += chunk;
     try {
-      const { brands, purchasers, cron: cronExpr, timezone } = JSON.parse(
-        body || "{}",
-      );
+      const {
+        brands,
+        purchasers,
+        cron: cronExpr,
+        timezone,
+      } = JSON.parse(body || "{}");
       const brandList = Array.isArray(brands)
         ? brands.filter((b) => typeof b === "string" && b.trim() !== "")
         : [];
@@ -857,7 +858,11 @@ createServer(async (req, res) => {
         );
         return;
       }
-      if (!cronExpr || typeof cronExpr !== "string" || !cron.validate(cronExpr)) {
+      if (
+        !cronExpr ||
+        typeof cronExpr !== "string" ||
+        !cron.validate(cronExpr)
+      ) {
         res.writeHead(400, { "Content-Type": "application/json" });
         res.end(
           JSON.stringify({
@@ -905,9 +910,12 @@ createServer(async (req, res) => {
     for await (const chunk of req) body += chunk;
     try {
       const id = decodeURIComponent(url.slice("/api/schedules/".length));
-      const { brands, purchasers, cron: cronExpr, timezone } = JSON.parse(
-        body || "{}",
-      );
+      const {
+        brands,
+        purchasers,
+        cron: cronExpr,
+        timezone,
+      } = JSON.parse(body || "{}");
       const brandList = Array.isArray(brands)
         ? brands.filter((b) => typeof b === "string" && b.trim() !== "")
         : [];
@@ -923,7 +931,11 @@ createServer(async (req, res) => {
         );
         return;
       }
-      if (!cronExpr || typeof cronExpr !== "string" || !cron.validate(cronExpr)) {
+      if (
+        !cronExpr ||
+        typeof cronExpr !== "string" ||
+        !cron.validate(cronExpr)
+      ) {
         res.writeHead(400, { "Content-Type": "application/json" });
         res.end(
           JSON.stringify({
