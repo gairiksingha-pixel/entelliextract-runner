@@ -73,7 +73,7 @@
       .header-inner {
         max-width: 100%;
         margin: 0;
-        padding: 0.75rem 1.275rem;
+        padding: 0.637rem 1.275rem 0.425rem 1.275rem;
         box-sizing: border-box;
         display: flex;
         align-items: center;
@@ -95,7 +95,6 @@
         align-items: center;
         gap: 0.85rem;
         flex-wrap: wrap;
-        margin-top: 0.75rem;
       }
       .header-field-wrap {
         display: grid;
@@ -125,20 +124,20 @@
         line-height: 1.2;
       }
       .header .logo {
-        height: 30.6px;
+        height: 22.1px;
         width: auto;
         display: block;
         object-fit: contain;
-        margin-top: -6.8px;
+        margin-top: -0.425rem;
       }
       .header .logo-placeholder {
-        height: 30.6px;
+        height: 25.5px;
         display: flex;
         align-items: center;
+        margin-top: -0.425rem;
         font-weight: 600;
         color: var(--accent);
         font-size: 1.1rem;
-        margin-top: -6.8px;
       }
       .header-label {
         font-size: 0.8rem;
@@ -147,10 +146,10 @@
         font-weight: 600;
       }
       .header-select {
-        width: 180px;
-        min-width: 180px;
-        max-width: 180px;
-        height: 34px;
+        width: 149.6px;
+        min-width: 149.6px;
+        max-width: 149.6px;
+        height: 27.2px;
         padding: 0.297rem 1.7rem 0.297rem 0.51rem;
         border: 0.85px solid var(--border);
         border-radius: var(--radius-sm);
@@ -185,12 +184,12 @@
       }
       .filter-dropdown {
         position: relative;
-        width: 180px;
-        min-width: 180px;
+        width: 149.6px;
+        min-width: 149.6px;
       }
       .filter-dropdown-trigger {
         width: 100%;
-        height: 34px;
+        height: 27.2px;
         padding: 0.297rem 1.7rem 0.297rem 0.51rem;
         border: 0.85px solid var(--border);
         border-radius: var(--radius-sm);
@@ -267,9 +266,8 @@
         align-self: flex-end;
       }
       .header-btn-reset {
-        height: 34px;
+        height: 27.2px;
         padding: 0 0.85rem;
-        min-width: 180px;
         border: 0.85px solid var(--header-border);
         border-radius: var(--radius-sm);
         background: var(--header-bg);
@@ -596,7 +594,6 @@
         box-sizing: border-box;
         box-shadow: var(--shadow-btn);
         color: #fff;
-        min-width: 180px;
       }
       button.download-sync-report-btn {
         background: #2f5496;
@@ -617,15 +614,6 @@
       }
       button.download-report-btn.download-report-json-btn:hover:not(:disabled) {
         background: #4a3f62;
-        box-shadow: 0 1.7px 5.1px rgba(0, 0, 0, 0.2);
-      }
-      button.download-report-btn.download-report-schedule-btn {
-        background: #d97706;
-      }
-      button.download-report-btn.download-report-schedule-btn:hover:not(
-          :disabled
-        ) {
-        background: #b45309;
         box-shadow: 0 1.7px 5.1px rgba(0, 0, 0, 0.2);
       }
       button.download-sync-report-btn:disabled,
@@ -1038,10 +1026,6 @@
         margin-top: 0.34rem;
         font-size: 0.78rem;
         color: var(--fail);
-      }
-      .schedule-field .filter-dropdown {
-        width: 100%;
-        min-width: 100%;
       }
     </style>
   </head>
@@ -2339,8 +2323,7 @@
         var scheduleBtn = document.createElement("button");
         scheduleBtn.type = "button";
         scheduleBtn.textContent = "Schedule Extraction";
-        scheduleBtn.className =
-          "download-report-btn download-report-schedule-btn";
+        scheduleBtn.className = "header-btn-reset";
         scheduleBtn.style.marginLeft = "auto";
         scheduleBtn.onclick = function () {
           openScheduleModal();
@@ -2569,7 +2552,7 @@
           state && Array.isArray(state.schedules) ? state.schedules : [];
         var tz = state && Array.isArray(state.timezones) ? state.timezones : [];
         var html =
-          '<div class="schedule-header-row"><div>Manage scheduled sync &amp; extraction jobs.</div><div style="display:flex;gap:0.51rem;flex-wrap:wrap;"><button type="button" id="schedule-history-btn" class="btn-secondary">History</button><button type="button" id="schedule-create-btn" class="download-report-btn download-report-schedule-btn">Create a Schedule</button></div></div><div style="flex:1;display:flex;flex-direction:column;min-height:0;">';
+          '<div class="schedule-header-row"><div>Manage scheduled sync &amp; extraction jobs.</div><div style="display:flex;gap:0.51rem;flex-wrap:wrap;"><button type="button" id="schedule-history-btn" class="btn-secondary">History</button><button type="button" id="schedule-create-btn" class="download-report-btn download-report-html-btn">Create a Schedule</button></div></div><div style="flex:1;display:flex;flex-direction:column;min-height:0;">';
         if (!schedules.length) {
           html +=
             '<div class="schedule-empty">No schedules created. Please create a schedule.</div>';
@@ -2596,7 +2579,7 @@
               escapeHtml(s.timezone) +
               "</td><td>" +
               escapeHtml(s.createdAt || "") +
-              '</td><td><div style="display:flex;flex-wrap:wrap;gap:0.51rem;">' +
+              "</td><td><div style=\"display:flex;flex-wrap:wrap;gap:0.51rem;\">" +
               '<button type="button" class="btn-secondary" data-sched-edit>Edit</button>' +
               '<button type="button" class="btn-secondary" data-sched-delete>Delete</button>' +
               "</div></td></tr>";
@@ -2681,9 +2664,7 @@
       }
       function refreshSchedulePurchaserOptions() {
         var panel = document.getElementById("sched-purchaser-dropdown-panel");
-        var trigger = document.getElementById(
-          "sched-purchaser-dropdown-trigger",
-        );
+        var trigger = document.getElementById("sched-purchaser-dropdown-trigger");
         if (!panel || !trigger) return;
         var brands = getSelectedScheduleBrands();
         var opts =
@@ -2739,7 +2720,7 @@
           .join("");
         var cronOptions = "";
         for (var h = 0; h < 24; h++) {
-          for (var m = 0; m < 60; m += 5) {
+          for (var m = 0; m < 60; m++) {
             var displayHour = ((h + 11) % 12) + 1; // 0 -> 12, 13 -> 1
             var ampm = h < 12 ? "AM" : "PM";
             var minLabel = String(m).padStart(2, "0");
@@ -2783,30 +2764,21 @@
           "</div>" +
           '<div id="schedule-error" class="schedule-error"></div>' +
           "</div>" +
-          '<div class="modal-footer" style="margin-top:0.85rem;"><button type="button" id="schedule-cancel-btn" class="btn-secondary">Cancel</button><button type="button" id="schedule-save-btn" class="download-report-btn download-report-schedule-btn">' +
+          '<div class="modal-footer" style="margin-top:0.85rem;"><button type="button" id="schedule-cancel-btn" class="btn-secondary">Cancel</button><button type="button" id="schedule-save-btn" class="download-report-btn download-report-html-btn">' +
           (schedule ? "Update schedule" : "Save schedule") +
           "</button></div>";
         refreshSchedulePurchaserOptions();
-        var brandTrigger = document.getElementById(
-          "sched-brand-dropdown-trigger",
-        );
+        var brandTrigger = document.getElementById("sched-brand-dropdown-trigger");
         var brandPanel = document.getElementById("sched-brand-dropdown-panel");
         var brandDropdown = document.getElementById("sched-brand-dropdown");
-        var purchaserTrigger = document.getElementById(
-          "sched-purchaser-dropdown-trigger",
-        );
-        var purchaserPanel = document.getElementById(
-          "sched-purchaser-dropdown-panel",
-        );
-        var purchaserDropdown = document.getElementById(
-          "sched-purchaser-dropdown",
-        );
+        var purchaserTrigger = document.getElementById("sched-purchaser-dropdown-trigger");
+        var purchaserPanel = document.getElementById("sched-purchaser-dropdown-panel");
+        var purchaserDropdown = document.getElementById("sched-purchaser-dropdown");
         function closeScheduleDropdowns() {
           if (brandPanel) brandPanel.classList.remove("open");
           if (purchaserPanel) purchaserPanel.classList.remove("open");
           if (brandTrigger) brandTrigger.setAttribute("aria-expanded", "false");
-          if (purchaserTrigger)
-            purchaserTrigger.setAttribute("aria-expanded", "false");
+          if (purchaserTrigger) purchaserTrigger.setAttribute("aria-expanded", "false");
         }
         function toggleScheduleDropdown(panel, trigger) {
           var isOpen = panel && panel.classList.contains("open");
@@ -2841,14 +2813,12 @@
         document.addEventListener("click", function () {
           closeScheduleDropdowns();
         });
-        brandPanel
-          .querySelectorAll("input[type=checkbox]")
-          .forEach(function (cb) {
-            cb.addEventListener("change", function () {
-              updateScheduleDropdownTrigger("brand");
-              refreshSchedulePurchaserOptions();
-            });
+        brandPanel.querySelectorAll("input[type=checkbox]").forEach(function (cb) {
+          cb.addEventListener("change", function () {
+            updateScheduleDropdownTrigger("brand");
+            refreshSchedulePurchaserOptions();
           });
+        });
         var cancelBtn = document.getElementById("schedule-cancel-btn");
         if (cancelBtn) {
           cancelBtn.onclick = function () {
@@ -2866,9 +2836,7 @@
           var tzEl = document.getElementById("sched-tz");
           if (schedule.brands && schedule.brands.length) {
             schedule.brands.forEach(function (b) {
-              var cb = brandPanel.querySelector(
-                'input[type=checkbox][value="' + escapeHtml(b) + '"]',
-              );
+              var cb = brandPanel.querySelector('input[type=checkbox][value="' + escapeHtml(b) + '"]');
               if (cb) cb.checked = true;
             });
             updateScheduleDropdownTrigger("brand");
@@ -2876,9 +2844,7 @@
           }
           if (schedule.purchasers && schedule.purchasers.length) {
             schedule.purchasers.forEach(function (p) {
-              var cb = purchaserPanel.querySelector(
-                'input[type=checkbox][value="' + escapeHtml(p) + '"]',
-              );
+              var cb = purchaserPanel.querySelector('input[type=checkbox][value="' + escapeHtml(p) + '"]');
               if (cb) cb.checked = true;
             });
             updateScheduleDropdownTrigger("purchaser");
@@ -2919,14 +2885,13 @@
           })
           .then(function (list) {
             var html =
-              '<div class="schedule-header-row">' +
-              '<div style="display:flex;gap:0.51rem;flex-wrap:wrap;">' +
+              '<div class="schedule-header-row"><div>Reports history</div><button type="button" id="history-back-btn" class="btn-secondary">Back to Schedules</button></div>' +
+              '<div style="flex:1;display:flex;flex-direction:column;min-height:0;">';
+            html +=
+              '<div style="margin-bottom:0.85rem;display:flex;flex-wrap:wrap;gap:0.51rem;">' +
               '<button type="button" id="history-latest-summary" class="download-report-btn download-report-html-btn">Latest summary (HTML)</button>' +
               '<button type="button" id="history-extractions-zip" class="download-report-btn download-report-json-btn">Latest extractions ZIP</button>' +
-              "</div>" +
-              '<button type="button" id="history-back-btn" class="btn-secondary">Back to Schedules</button>' +
-              "</div>" +
-              '<div style="flex:1;display:flex;flex-direction:column;min-height:0;">';
+              "</div>";
             var runMap = {};
             function extractRunId(filename) {
               var match = filename.match(/^report_(.+?)_\d+\.(html|json)$/);
@@ -2935,10 +2900,7 @@
             (list.html || []).forEach(function (r) {
               var runId = extractRunId(r.name);
               if (runId) {
-                if (
-                  !runMap[runId] ||
-                  (r.mtime || 0) < (runMap[runId].mtime || 0)
-                ) {
+                if (!runMap[runId] || (r.mtime || 0) < (runMap[runId].mtime || 0)) {
                   runMap[runId] = {
                     runId: runId,
                     mtime: r.mtime || 0,
