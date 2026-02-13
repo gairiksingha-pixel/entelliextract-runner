@@ -859,6 +859,16 @@ createServer(async (req, res) => {
         origin: "manual", // Explicitly mark as manual run
       };
       ACTIVE_RUNS.set(caseId, runInfo);
+
+      // Clear ALL other case states — only the latest run should be resumable.
+      // This prevents the UI deadlock where multiple cases show Resume buttons
+      // after page reload (e.g. P1 was paused, then PIPE was killed by reload).
+      const allStates = loadRunStates();
+      for (const key of Object.keys(allStates)) {
+        if (key !== caseId) delete allStates[key];
+      }
+      saveRunStates(allStates);
+
       updateRunState(caseId, runInfo);
 
       res.writeHead(200, {

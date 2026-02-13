@@ -2386,103 +2386,134 @@
           .catch(function () {});
 
         // Step 2: Check for resumable stopped processes
+        // Only restore the MOST RECENT one to avoid deadlock where multiple
+        // Resume buttons each disable the other rows.
         var resumableCases = ["P1", "P2", "PIPE", "P5", "P6"];
 
-        resumableCases.forEach(function (caseId) {
-          fetch("/api/run-status?caseId=" + caseId)
-            .then(function (r) {
-              return r.ok ? r.json() : null;
-            })
-            .then(function (status) {
-              if (!status || !status.canResume || status.isRunning) return;
-
-              var caseRow = tbody
-                ? tbody.querySelector('tr[data-case-id="' + caseId + '"]')
-                : null;
-              if (!caseRow) return;
-
-              var runBtn = caseRow.querySelector("button.run");
-              var resultDiv = document.getElementById("result-" + caseId);
-              var resetBtn = caseRow.querySelector(
-                "button.reset-case:not(.reset-during-resume)",
-              );
-
-              // Set up resume state from saved state
-              var savedState = status.state || {};
-
-              if (savedState.params) {
-                if (savedState.params.syncLimit != null) {
-                  caseRow._resumeSyncLimit = savedState.params.syncLimit;
+        Promise.all(
+          resumableCases.map(function (caseId) {
+            return fetch("/api/run-status?caseId=" + caseId)
+              .then(function (r) {
+                return r.ok ? r.json() : null;
+              })
+              .then(function (status) {
+                if (status && status.canResume && !status.isRunning) {
+                  return { caseId: caseId, status: status };
                 }
-                if (savedState.params.extractLimit != null) {
-                  caseRow._resumeExtractLimit = savedState.params.extractLimit;
-                }
-              }
-
-              if (savedState.syncProgress) {
-                caseRow._resumeSync = savedState.syncProgress;
-              }
-              if (savedState.extractProgress) {
-                caseRow._resumeExtract = savedState.extractProgress;
-              }
-
-              caseRow._aborted = true;
-
-              // Disable limit inputs
-              var limitInputs = caseRow.querySelectorAll(
-                ".limit-sync, .limit-extract",
-              );
-              limitInputs.forEach(function (input) {
-                input.disabled = true;
+                return null;
+              })
+              .catch(function () {
+                return null;
               });
+          }),
+        )
+          .then(function (results) {
+            var candidates = results.filter(Boolean);
+            if (candidates.length === 0) return;
 
-              if (runBtn) runBtn.disabled = true;
+            // Pick the one with the latest stoppedTime
+            candidates.sort(function (a, b) {
+              var timeA =
+                a.status.state && a.status.state.stoppedTime
+                  ? new Date(a.status.state.stoppedTime).getTime()
+                  : 0;
+              var timeB =
+                b.status.state && b.status.state.stoppedTime
+                  ? new Date(b.status.state.stoppedTime).getTime()
+                  : 0;
+              return timeB - timeA;
+            });
 
-              if (resetBtn) {
-                resetBtn.textContent = "Resume";
-                resetBtn.classList.remove("stop-btn");
-                resetBtn.classList.add("resume-btn");
-                resetBtn.onclick = function () {
-                  runCase(caseId, runBtn, resultDiv, { resume: true });
-                };
+            var winner = candidates[0];
+            var caseId = winner.caseId;
+            var status = winner.status;
+
+            var caseRow = tbody
+              ? tbody.querySelector('tr[data-case-id="' + caseId + '"]')
+              : null;
+            if (!caseRow) return;
+
+            var runBtn = caseRow.querySelector("button.run");
+            var resultDiv = document.getElementById("result-" + caseId);
+            var resetBtn = caseRow.querySelector(
+              "button.reset-case:not(.reset-during-resume)",
+            );
+
+            // Set up resume state from saved state
+            var savedState = status.state || {};
+
+            if (savedState.params) {
+              if (savedState.params.syncLimit != null) {
+                caseRow._resumeSyncLimit = savedState.params.syncLimit;
               }
-
-              var resetDuringResumeBtn = caseRow.querySelector(
-                ".reset-during-resume",
-              );
-              if (resetDuringResumeBtn) {
-                resetDuringResumeBtn.classList.add("show-during-resume");
+              if (savedState.params.extractLimit != null) {
+                caseRow._resumeExtractLimit = savedState.params.extractLimit;
               }
+            }
 
-              if (resultDiv) {
-                resultDiv.className = "result result-placeholder";
-                var msg = "Stopped";
-                if (savedState.syncProgress && savedState.extractProgress) {
-                  msg +=
-                    " (sync: " +
-                    savedState.syncProgress.done +
-                    ", extract: " +
-                    savedState.extractProgress.done +
-                    ")";
-                } else if (savedState.syncProgress) {
-                  msg += " (sync: " + savedState.syncProgress.done + ")";
-                } else if (savedState.extractProgress) {
-                  msg += " (extract: " + savedState.extractProgress.done + ")";
-                }
-                msg += ". Click Resume to continue from the next file.";
-                resultDiv.innerHTML =
-                  '<span class="result-placeholder-text">' +
-                  escapeHtml(msg) +
-                  "</span>";
+            if (savedState.syncProgress) {
+              caseRow._resumeSync = savedState.syncProgress;
+            }
+            if (savedState.extractProgress) {
+              caseRow._resumeExtract = savedState.extractProgress;
+            }
+
+            caseRow._aborted = true;
+
+            // Disable limit inputs
+            var limitInputs = caseRow.querySelectorAll(
+              ".limit-sync, .limit-extract",
+            );
+            limitInputs.forEach(function (input) {
+              input.disabled = true;
+            });
+
+            if (runBtn) runBtn.disabled = true;
+
+            if (resetBtn) {
+              resetBtn.textContent = "Resume";
+              resetBtn.classList.remove("stop-btn");
+              resetBtn.classList.add("resume-btn");
+              resetBtn.onclick = function () {
+                runCase(caseId, runBtn, resultDiv, { resume: true });
+              };
+            }
+
+            var resetDuringResumeBtn = caseRow.querySelector(
+              ".reset-during-resume",
+            );
+            if (resetDuringResumeBtn) {
+              resetDuringResumeBtn.classList.add("show-during-resume");
+            }
+
+            if (resultDiv) {
+              resultDiv.className = "result result-placeholder";
+              var msg = "Stopped";
+              if (savedState.syncProgress && savedState.extractProgress) {
+                msg +=
+                  " (sync: " +
+                  savedState.syncProgress.done +
+                  ", extract: " +
+                  savedState.extractProgress.done +
+                  ")";
+              } else if (savedState.syncProgress) {
+                msg += " (sync: " + savedState.syncProgress.done + ")";
+              } else if (savedState.extractProgress) {
+                msg += " (extract: " + savedState.extractProgress.done + ")";
               }
+              msg += ". Click Resume to continue from the next file.";
+              resultDiv.innerHTML =
+                '<span class="result-placeholder-text">' +
+                escapeHtml(msg) +
+                "</span>";
+            }
 
-              setOtherRowsInactive(
-                caseRow,
-                "Resume the stopped process or reset it to enable other runs",
-              );
-            })
-            .catch(function () {});
-        });
+            setOtherRowsInactive(
+              caseRow,
+              "Resume the stopped process or reset it to enable other runs",
+            );
+          })
+          .catch(function () {});
       })();
       (function initDownloadBar() {
         var container = document.getElementById("download-bar-btns");
