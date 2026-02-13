@@ -402,9 +402,9 @@
         background: var(--header-bg);
       }
       .limits-col {
-        width: 126.65px;
-        min-width: 126.65px;
-        max-width: 126.65px;
+        width: 156.35px;
+        min-width: 156.35px;
+        max-width: 156.35px;
       }
       .limits-cell {
         font-size: 0.85rem;
@@ -414,7 +414,7 @@
       }
       .limits-cell .limit-row {
         display: grid;
-        grid-template-columns: auto 40.8px;
+        grid-template-columns: auto 70.5px;
         gap: 0.425rem 0.637rem;
         align-items: center;
         min-height: 1.87rem;
@@ -424,10 +424,10 @@
         font-weight: 500;
       }
       .limits-cell input[type="number"] {
-        width: 40.8px;
-        min-width: 40.8px;
-        max-width: 40.8px;
-        height: 25.5px;
+        width: 70.5px;
+        min-width: 70.5px;
+        max-width: 70.5px;
+        height: 28.05px;
         padding: 0.34rem 0.425rem;
         border: 0.85px solid var(--border);
         border-radius: var(--radius-sm);
@@ -442,6 +442,10 @@
         transition:
           border-color 0.15s ease,
           box-shadow 0.15s ease;
+      }
+      .limits-cell input[type="number"]::-webkit-inner-spin-button,
+      .limits-cell input[type="number"]::-webkit-outer-spin-button {
+        opacity: 1;
       }
       .limits-cell input[type="number"]:hover:not(:disabled) {
         border-color: var(--border-light);
@@ -805,8 +809,8 @@
       .result-table-wrap th {
         font-weight: 600;
         color: var(--text);
-        width: 97.75px;
-        min-width: 97.75px;
+        width: 195.5px;
+        min-width: 195.5px;
       }
       .result-table-wrap td {
         color: var(--text-secondary);
@@ -828,6 +832,26 @@
       .result-table-wrap tr:last-child th:last-child,
       .result-table-wrap tr:last-child td:last-child {
         border-bottom-right-radius: var(--radius-sm);
+      }
+      .info-icon {
+        display: inline-block;
+        margin-left: 0.15rem;
+        width: 16px;
+        height: 16px;
+        border-radius: 50%;
+        border: 1px solid var(--primary);
+        color: var(--primary);
+        font-size: 0.8rem;
+        font-weight: 700;
+        line-height: 14px;
+        text-align: center;
+        cursor: default;
+        background: var(--accent-light);
+        vertical-align: middle;
+      }
+      .info-icon:hover {
+        border-color: var(--primary-hover);
+        color: var(--primary-hover);
       }
       .result-table-wrap tr.status-row th {
         border-top: none;
@@ -1294,13 +1318,14 @@
             parsed.brandAndPurchaserList.push(line.trim());
           } else if (
             (m =
-              /^Extraction metrics:\s*success=(\d+),\s*failed=(\d+),\s*skipped=(\d+)\s*$/.exec(
+              /^Extraction metrics:\s*success=(\d+),\s*skipped=(\d+),\s*failed=(\d+)\s*$/.exec(
                 line,
               ))
           ) {
+            // Match CLI output: "Extraction metrics: success=X, skipped=Y, failed=Z"
             parsed.extractSuccess = m[1];
-            parsed.extractFailed = m[2];
-            parsed.extractSkipped = m[3];
+            parsed.extractSkipped = m[2];
+            parsed.extractFailed = m[3];
           } else if (
             (m = /^Extraction result\(s\):\s*(.+?)\s*\(full/.exec(line))
           )
@@ -1349,10 +1374,6 @@
           rows.push(["Message", "No files found to sync or extract."]);
         } else {
           if (hasSync) {
-            if (parsed.downloadLimit != null)
-              rows.push(["Download limit", parsed.downloadLimit]);
-            if (parsed.downloadedNew != null)
-              rows.push(["Downloaded (new)", parsed.downloadedNew]);
             var brandPurchaser =
               parsed.brandAndPurchaser ||
               (parsed.brandAndPurchaserList &&
@@ -1365,12 +1386,20 @@
               rows.push(["Staging path", parsed.stagingPaths.join("\n")]);
             var overview = [];
             if (parsed.downloadedNew != null)
-              overview.push("Downloaded: " + parsed.downloadedNew);
-            if (parsed.skipped != null)
-              overview.push("Skipped: " + parsed.skipped);
+              overview.push(
+                "Downloaded: " + escapeHtml(parsed.downloadedNew),
+              );
+            if (parsed.skipped != null) {
+              var skippedLabel = escapeHtml(parsed.skipped);
+              var skippedHtml =
+                'Skipped<span class="info-icon" title="These files were already synced in a previous run and are unchanged, so they were skipped.">i</span>: ' +
+                skippedLabel;
+              overview.push(skippedHtml);
+            }
             if (parsed.errors != null)
-              overview.push("Errors: " + parsed.errors);
-            if (overview.length) rows.push(["Overview", overview.join(", ")]);
+              overview.push("Errors: " + escapeHtml(parsed.errors));
+            if (overview.length)
+              rows.push(["Download overview", overview.join(", ")]);
           }
           if (hasExtract) {
             if (parsed.brandAndPurchaser && !hasSync)
@@ -1380,17 +1409,21 @@
               parsed.extractFailed != null ||
               parsed.extractSkipped != null
             ) {
+              var successVal = parsed.extractSuccess || "0";
+              var skippedVal = parsed.extractSkipped || "0";
+              var failedVal = parsed.extractFailed || "0";
+              var skippedLabel2 = escapeHtml(skippedVal);
               var detail =
                 "Success: " +
-                (parsed.extractSuccess || "0") +
+                escapeHtml(successVal) +
+                ', Skipped<span class="info-icon" title="These files were already extracted in a previous run, so they were skipped this time.">i</span>: ' +
+                skippedLabel2 +
                 ", Failed: " +
-                (parsed.extractFailed || "0") +
-                ", Skipped: " +
-                (parsed.extractSkipped || "0");
-              rows.push(["Total file extracted", detail]);
+                escapeHtml(failedVal);
+              rows.push(["Extraction overview", detail]);
             }
             if (parsed.extractionResultsPath)
-              rows.push(["Staging path", parsed.extractionResultsPath]);
+              rows.push(["Extraction path", parsed.extractionResultsPath]);
             if (parsed.reportsPath)
               rows.push(["Reports path", parsed.reportsPath]);
           }
@@ -1425,7 +1458,10 @@
             "><th>" +
             escapeHtml(r[0]) +
             "</th><td>" +
-            (r[0] === "Standard error" || r[0] === "Output"
+            (r[0] === "Standard error" ||
+            r[0] === "Output" ||
+            r[0] === "Download overview" ||
+            r[0] === "Extraction overview"
               ? r[1]
               : escapeHtml(r[1]).replace(/\n/g, "<br>")) +
             "</td></tr>"
