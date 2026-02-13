@@ -73,7 +73,7 @@
       .header-inner {
         max-width: 100%;
         margin: 0;
-        padding: 0.425rem 1.062rem 0.085rem 1.062rem;
+        padding: 0.75rem 1.275rem;
         box-sizing: border-box;
         display: flex;
         align-items: center;
@@ -88,13 +88,14 @@
         justify-content: center;
         gap: 0;
         flex-shrink: 0;
-        padding-top: 0.637rem;
+        padding-top: 0;
       }
       .header-filter-row {
         display: flex;
         align-items: center;
         gap: 0.85rem;
         flex-wrap: wrap;
+        margin-top: 0.75rem;
       }
       .header-field-wrap {
         display: grid;
@@ -124,20 +125,20 @@
         line-height: 1.2;
       }
       .header .logo {
-        height: 22.1px;
+        height: 30.6px;
         width: auto;
         display: block;
         object-fit: contain;
-        margin-top: -0.425rem;
+        margin-top: -6.8px;
       }
       .header .logo-placeholder {
-        height: 25.5px;
+        height: 30.6px;
         display: flex;
         align-items: center;
-        margin-top: -0.425rem;
         font-weight: 600;
         color: var(--accent);
         font-size: 1.1rem;
+        margin-top: -6.8px;
       }
       .header-label {
         font-size: 0.8rem;
@@ -146,10 +147,10 @@
         font-weight: 600;
       }
       .header-select {
-        width: 149.6px;
-        min-width: 149.6px;
-        max-width: 149.6px;
-        height: 27.2px;
+        width: 180px;
+        min-width: 180px;
+        max-width: 180px;
+        height: 34px;
         padding: 0.297rem 1.7rem 0.297rem 0.51rem;
         border: 0.85px solid var(--border);
         border-radius: var(--radius-sm);
@@ -184,12 +185,12 @@
       }
       .filter-dropdown {
         position: relative;
-        width: 149.6px;
-        min-width: 149.6px;
+        width: 180px;
+        min-width: 180px;
       }
       .filter-dropdown-trigger {
         width: 100%;
-        height: 27.2px;
+        height: 34px;
         padding: 0.297rem 1.7rem 0.297rem 0.51rem;
         border: 0.85px solid var(--border);
         border-radius: var(--radius-sm);
@@ -266,11 +267,12 @@
         align-self: flex-end;
       }
       .header-btn-reset {
-        height: 27.2px;
+        height: 34px;
         padding: 0 0.85rem;
-        border: 0.85px solid var(--header-border);
+        min-width: 180px;
+        border: 0.85px solid #244a7a;
         border-radius: var(--radius-sm);
-        background: var(--header-bg);
+        background: #2f5496;
         color: var(--header-text);
         font-size: 0.875rem;
         font-weight: 600;
@@ -292,8 +294,8 @@
           0 1.7px 3.4px rgba(0, 0, 0, 0.1);
       }
       .header-btn-reset:hover {
-        background: var(--header-border);
-        border-color: var(--header-border);
+        background: #244a7a;
+        border-color: #244a7a;
         color: var(--header-text);
       }
       .main {
@@ -594,6 +596,7 @@
         box-sizing: border-box;
         box-shadow: var(--shadow-btn);
         color: #fff;
+        min-width: 180px;
       }
       button.download-sync-report-btn {
         background: #2f5496;
@@ -603,17 +606,26 @@
         box-shadow: 0 1.7px 5.1px rgba(0, 0, 0, 0.2);
       }
       button.download-report-btn.download-report-html-btn {
-        background: #216c6d;
+        background: #2f5496;
       }
       button.download-report-btn.download-report-html-btn:hover:not(:disabled) {
-        background: #1a5758;
+        background: #244a7a;
         box-shadow: 0 1.7px 5.1px rgba(0, 0, 0, 0.2);
       }
       button.download-report-btn.download-report-json-btn {
-        background: #5c4d7a;
+        background: #2f5496;
       }
       button.download-report-btn.download-report-json-btn:hover:not(:disabled) {
-        background: #4a3f62;
+        background: #244a7a;
+        box-shadow: 0 1.7px 5.1px rgba(0, 0, 0, 0.2);
+      }
+      button.download-report-btn.download-report-schedule-btn {
+        background: #2f5496;
+      }
+      button.download-report-btn.download-report-schedule-btn:hover:not(
+          :disabled
+        ) {
+        background: #244a7a;
         box-shadow: 0 1.7px 5.1px rgba(0, 0, 0, 0.2);
       }
       button.download-sync-report-btn:disabled,
@@ -865,6 +877,172 @@
       .result.fail .result-table-wrap tr.status-row td {
         color: var(--fail);
       }
+      .modal-overlay {
+        position: fixed;
+        inset: 0;
+        background: rgba(15, 23, 42, 0.45);
+        display: none;
+        align-items: center;
+        justify-content: center;
+        z-index: 1000;
+      }
+      .modal-overlay.open {
+        display: flex;
+      }
+      .modal {
+        background: var(--surface);
+        border-radius: var(--radius);
+        box-shadow: var(--shadow-lg);
+        border: 0.85px solid var(--border);
+        width: 800px;
+        max-width: 90vw;
+        height: 650px;
+        max-height: 85vh;
+        padding: 1.062rem 1.275rem 0.85rem;
+        box-sizing: border-box;
+        display: flex;
+        flex-direction: column;
+      }
+      .modal-header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        margin-bottom: 0.85rem;
+        padding-bottom: 0.51rem;
+        border-bottom: 0.85px solid var(--border-light);
+        background: var(--row-alt);
+      }
+      .modal-title {
+        font-size: 0.95rem;
+        font-weight: 600;
+        color: var(--text);
+      }
+      .modal-close-icon {
+        border: none;
+        background: transparent;
+        cursor: pointer;
+        font-size: 1rem;
+        color: var(--muted);
+        padding: 0.17rem;
+      }
+      .modal-close-icon:hover {
+        color: var(--fail);
+      }
+      .modal-body {
+        flex: 1;
+        overflow-y: auto;
+        font-size: 0.85rem;
+        color: var(--text-secondary);
+        display: flex;
+        flex-direction: column;
+      }
+      .modal-footer {
+        margin-top: 0.85rem;
+        display: flex;
+        justify-content: flex-end;
+        gap: 0.51rem;
+        padding-top: 0.51rem;
+        border-top: 0.85px solid var(--border-light);
+        background: var(--row-alt);
+      }
+      .btn-secondary {
+        background: var(--surface);
+        color: var(--text-secondary);
+        border: 0.85px solid var(--border);
+        border-radius: var(--radius-sm);
+        padding: 0.46rem 0.85rem;
+        font-size: 0.85rem;
+        font-weight: 600;
+        cursor: pointer;
+        font-family: inherit;
+        box-shadow: var(--shadow-sm);
+      }
+      .btn-secondary:hover {
+        background: var(--row-alt);
+        color: var(--text);
+      }
+      .schedule-header-row {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        margin-bottom: 0.85rem;
+        gap: 0.85rem;
+      }
+      .schedule-empty {
+        color: var(--muted);
+        text-align: center;
+        padding: 2rem 1rem;
+        flex: 1;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+      }
+      .schedule-list {
+        width: 100%;
+        border-collapse: collapse;
+        font-size: 0.8rem;
+      }
+      .schedule-list th,
+      .schedule-list td {
+        padding: 0.34rem 0.51rem;
+        border: 0.85px solid var(--border-light);
+        text-align: left;
+        vertical-align: top;
+      }
+      .schedule-form-grid {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+        gap: 0.68rem 0.85rem;
+        margin-top: 0.34rem;
+      }
+      .schedule-field {
+        display: flex;
+        flex-direction: column;
+        gap: 0.21rem;
+      }
+      .schedule-label {
+        font-size: 0.8rem;
+        font-weight: 600;
+        color: var(--text-secondary);
+      }
+      .schedule-hint {
+        font-size: 0.78rem;
+        color: var(--muted);
+      }
+      .schedule-select,
+      .schedule-input {
+        width: 100%;
+        height: 27.2px;
+        padding: 0.297rem 0.51rem;
+        border: 0.85px solid var(--border);
+        border-radius: var(--radius-sm);
+        background: var(--surface);
+        color: var(--text);
+        font-size: 0.85rem;
+        font-family: inherit;
+        box-sizing: border-box;
+        box-shadow:
+          0 0.85px 1.7px rgba(0, 0, 0, 0.06),
+          inset 0 0.85px 0.85px rgba(255, 255, 255, 0.8);
+      }
+      .schedule-select:focus,
+      .schedule-input:focus {
+        outline: none;
+        border-color: var(--primary);
+        box-shadow:
+          0 0 0 1.7px rgba(45, 157, 95, 0.2),
+          0 1.7px 3.4px rgba(0, 0, 0, 0.08),
+          inset 0 0.85px 0.85px rgba(255, 255, 255, 0.9);
+      }
+      .schedule-error {
+        margin-top: 0.34rem;
+        font-size: 0.78rem;
+        color: var(--fail);
+      }
+      .schedule-field .filter-dropdown {
+        width: 100%;
+        min-width: 100%;
+      }
     </style>
   </head>
   <body>
@@ -949,7 +1127,7 @@
                 class="header-btn-reset"
                 title="Clear brand and purchaser filter"
               >
-                Reset filter
+                Reset Filter
               </button>
             </div>
           </div>
@@ -976,6 +1154,30 @@
         </table>
       </div>
     </main>
+
+    <div id="schedule-modal-overlay" class="modal-overlay" aria-hidden="true">
+      <div
+        class="modal"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="schedule-modal-title"
+      >
+        <div class="modal-header">
+          <div class="modal-title" id="schedule-modal-title">
+            Schedule automatic sync &amp; extraction
+          </div>
+          <button
+            type="button"
+            id="schedule-modal-close-icon"
+            class="modal-close-icon"
+            aria-label="Close schedule dialog"
+          >
+            &#10005;
+          </button>
+        </div>
+        <div class="modal-body" id="schedule-modal-body"></div>
+      </div>
+    </div>
 
     <script type="module">
       (function () {
@@ -1386,9 +1588,7 @@
               rows.push(["Staging path", parsed.stagingPaths.join("\n")]);
             var overview = [];
             if (parsed.downloadedNew != null)
-              overview.push(
-                "Downloaded: " + escapeHtml(parsed.downloadedNew),
-              );
+              overview.push("Downloaded: " + escapeHtml(parsed.downloadedNew));
             if (parsed.skipped != null) {
               var skippedLabel = escapeHtml(parsed.skipped);
               var skippedHtml =
@@ -1702,8 +1902,40 @@
             });
           }
         }
+        if (isResume) row._aborted = false;
+        if (row && !isResume && row._activeController) {
+          if (resetBtn) {
+            resetBtn.textContent = "Resume";
+            resetBtn.classList.remove("stop-btn");
+            resetBtn.classList.add("resume-btn");
+            resetBtn.onclick = function () {
+              runCase(caseId, btn, resultDiv, { resume: true });
+            };
+            var limitInputs = row.querySelectorAll(
+              ".limit-sync, .limit-extract",
+            );
+            if (limitInputs) {
+              limitInputs.forEach(function (input) {
+                input.disabled = false;
+              });
+            }
+          }
+        }
+
+        // Save state to localStorage as backup
+        try {
+          localStorage.setItem(
+            "intelliextract-run-state-" + caseId,
+            JSON.stringify({
+              startTime: new Date().toISOString(),
+              params: params,
+              status: "running",
+            }),
+          );
+        } catch (_) {}
+
         if (resetBtn) {
-          resetBtn.textContent = "Stop";
+          resetBtn.textContent = "Pause";
           resetBtn.classList.remove("resume-btn");
           resetBtn.classList.add("stop-btn");
           resetBtn.onclick = function () {
@@ -1988,14 +2220,9 @@
                 : null;
               if (resetDuringResumeBtn)
                 resetDuringResumeBtn.classList.add("show-during-resume");
-              var syncDone =
-                lastSyncProgress && lastSyncProgress.done != null
-                  ? lastSyncProgress.done
-                  : 0;
+              var syncDone = row && row._resumeSync ? row._resumeSync.done : 0;
               var extDone =
-                lastExtractionProgress && lastExtractionProgress.done != null
-                  ? lastExtractionProgress.done
-                  : 0;
+                row && row._resumeExtract ? row._resumeExtract.done : 0;
               var msg =
                 "Stopped. Click Resume to continue from where you left off.";
               if (syncDone > 0 || extDone > 0) {
@@ -2024,6 +2251,10 @@
               null,
               null,
             );
+            // Clear localStorage on error
+            try {
+              localStorage.removeItem("intelliextract-run-state-" + caseId);
+            } catch (_) {}
           }
         } finally {
           if (row) row._activeController = null;
@@ -2039,6 +2270,10 @@
               : null;
             if (resetDuringResumeBtn)
               resetDuringResumeBtn.classList.remove("show-during-resume");
+            // Clear localStorage on successful completion
+            try {
+              localStorage.removeItem("intelliextract-run-state-" + caseId);
+            } catch (_) {}
           }
         }
       }
@@ -2047,61 +2282,203 @@
       ROWS.forEach(function (c) {
         tbody.appendChild(renderRow(c, "rows"));
       });
-      (function restorePipelineResumeOnLoad() {
-        fetch("/api/run-status")
+
+      (function restoreAllCasesOnLoad() {
+        // Step 1: Check for actively running processes
+        fetch("/api/active-runs")
           .then(function (r) {
             return r.ok ? r.json() : null;
           })
-          .then(function (status) {
-            if (!status || !status.canResume) return;
-            var pipeRow = tbody
-              ? tbody.querySelector('tr[data-case-id="PIPE"]')
-              : null;
-            if (!pipeRow) return;
-            var runBtn = pipeRow.querySelector("button.run");
-            var resultDiv = document.getElementById("result-PIPE");
-            var resetBtn = pipeRow.querySelector(
-              "button.reset-case:not(.reset-during-resume)",
-            );
-            var syncLimit =
-              status.syncLimit != null ? Number(status.syncLimit) : 0;
-            if (Number.isNaN(syncLimit)) syncLimit = 0;
-            pipeRow._resumeSyncLimit = syncLimit;
-            pipeRow._resumeExtractLimit = 0;
-            pipeRow._aborted = true;
-            var limitInput = pipeRow.querySelector(".limit-sync");
-            if (limitInput) {
-              limitInput.value = String(syncLimit);
-              limitInput.disabled = true;
-            }
-            if (runBtn) runBtn.disabled = true;
-            if (resetBtn) {
-              resetBtn.textContent = "Resume";
-              resetBtn.classList.remove("stop-btn");
-              resetBtn.classList.add("resume-btn");
-              resetBtn.onclick = function () {
-                runCase("PIPE", runBtn, resultDiv, { resume: true });
-              };
-            }
-            var resetDuringResumeBtn = pipeRow.querySelector(
-              ".reset-during-resume",
-            );
-            if (resetDuringResumeBtn)
-              resetDuringResumeBtn.classList.add("show-during-resume");
-            if (resultDiv) {
-              resultDiv.className = "result result-placeholder";
-              var done = status.done != null ? Number(status.done) : 0;
-              var total = status.total != null ? Number(status.total) : 0;
-              resultDiv.innerHTML =
-                '<span class="result-placeholder-text">Stopped (extract: ' +
-                done +
-                "/" +
-                total +
-                "). Click Resume to continue from the next file.</span>";
-            }
-            setOtherRowsInactive(pipeRow, RESUME_OTHER_DISABLED_TITLE);
+          .then(function (data) {
+            if (!data || !data.activeRuns || data.activeRuns.length === 0)
+              return;
+
+            // Restore running state for active processes
+            data.activeRuns.forEach(function (run) {
+              var caseRow = tbody
+                ? tbody.querySelector('tr[data-case-id="' + run.caseId + '"]')
+                : null;
+              if (!caseRow) return;
+
+              var runBtn = caseRow.querySelector("button.run");
+              var resultDiv = document.getElementById("result-" + run.caseId);
+              var resetBtn = caseRow.querySelector(
+                "button.reset-case:not(.reset-during-resume)",
+              );
+
+              // Handle Scheduled Runs (Non-blocking)
+              if (run.origin === "scheduled") {
+                // Show just a "Running in background" chip in the output cell — no stop button here
+                if (resultDiv) {
+                  resultDiv.className = "result result-placeholder";
+                  resultDiv.innerHTML =
+                    '<span style="background:#e0f2f1;color:#00695c;padding:3px 10px;border-radius:14px;font-size:0.85em;font-weight:600;border:1px solid #b2dfdb;white-space:nowrap;">Running in background</span>';
+                }
+                // Move "Stop Auto Extraction" to the actions column (resetBtn)
+                if (resetBtn) {
+                  resetBtn.textContent = "Stop Auto Extraction";
+                  resetBtn.classList.remove("resume-btn");
+                  resetBtn.classList.add("stop-btn");
+                  resetBtn.onclick = function () {
+                    window.stopBackgroundJob(run.caseId);
+                  };
+                }
+                if (runBtn) runBtn.disabled = true;
+                setOtherRowsInactive(
+                  caseRow,
+                  "Background auto extraction is running. Stop it to run another case.",
+                );
+                return; // processing done for scheduled run
+              }
+
+              // Handle Manual Runs (Blocking - Existing Logic)
+              if (runBtn) runBtn.disabled = true;
+              if (resetBtn) {
+                resetBtn.textContent = "Pause";
+                resetBtn.classList.remove("resume-btn");
+                resetBtn.classList.add("stop-btn");
+                // Note: We can't set onclick to actually stop since the process is in memory
+                // User will need to manually refresh or the process will complete
+              }
+
+              if (resultDiv) {
+                resultDiv.className = "result running";
+                var msg = "Running";
+                if (run.progress) {
+                  msg +=
+                    "… " +
+                    run.progress.percent +
+                    "% (" +
+                    run.progress.done +
+                    " / " +
+                    run.progress.total +
+                    ")";
+                } else if (run.syncProgress) {
+                  msg +=
+                    "… Syncing (" +
+                    run.syncProgress.done +
+                    " / " +
+                    run.syncProgress.total +
+                    ")";
+                } else if (run.extractProgress) {
+                  msg +=
+                    "… Extracting (" +
+                    run.extractProgress.done +
+                    " / " +
+                    run.extractProgress.total +
+                    ")";
+                } else {
+                  msg += "…";
+                }
+                resultDiv.innerHTML =
+                  '<span class="exit">' +
+                  escapeHtml(msg) +
+                  '<span class="loading-dots"></span></span>';
+              }
+
+              setOtherRowsInactive(caseRow, "A process is already running");
+            });
           })
           .catch(function () {});
+
+        // Step 2: Check for resumable stopped processes
+        var resumableCases = ["P1", "P2", "PIPE", "P5", "P6"];
+
+        resumableCases.forEach(function (caseId) {
+          fetch("/api/run-status?caseId=" + caseId)
+            .then(function (r) {
+              return r.ok ? r.json() : null;
+            })
+            .then(function (status) {
+              if (!status || !status.canResume || status.isRunning) return;
+
+              var caseRow = tbody
+                ? tbody.querySelector('tr[data-case-id="' + caseId + '"]')
+                : null;
+              if (!caseRow) return;
+
+              var runBtn = caseRow.querySelector("button.run");
+              var resultDiv = document.getElementById("result-" + caseId);
+              var resetBtn = caseRow.querySelector(
+                "button.reset-case:not(.reset-during-resume)",
+              );
+
+              // Set up resume state from saved state
+              var savedState = status.state || {};
+
+              if (savedState.params) {
+                if (savedState.params.syncLimit != null) {
+                  caseRow._resumeSyncLimit = savedState.params.syncLimit;
+                }
+                if (savedState.params.extractLimit != null) {
+                  caseRow._resumeExtractLimit = savedState.params.extractLimit;
+                }
+              }
+
+              if (savedState.syncProgress) {
+                caseRow._resumeSync = savedState.syncProgress;
+              }
+              if (savedState.extractProgress) {
+                caseRow._resumeExtract = savedState.extractProgress;
+              }
+
+              caseRow._aborted = true;
+
+              // Disable limit inputs
+              var limitInputs = caseRow.querySelectorAll(
+                ".limit-sync, .limit-extract",
+              );
+              limitInputs.forEach(function (input) {
+                input.disabled = true;
+              });
+
+              if (runBtn) runBtn.disabled = true;
+
+              if (resetBtn) {
+                resetBtn.textContent = "Resume";
+                resetBtn.classList.remove("stop-btn");
+                resetBtn.classList.add("resume-btn");
+                resetBtn.onclick = function () {
+                  runCase(caseId, runBtn, resultDiv, { resume: true });
+                };
+              }
+
+              var resetDuringResumeBtn = caseRow.querySelector(
+                ".reset-during-resume",
+              );
+              if (resetDuringResumeBtn) {
+                resetDuringResumeBtn.classList.add("show-during-resume");
+              }
+
+              if (resultDiv) {
+                resultDiv.className = "result result-placeholder";
+                var msg = "Stopped";
+                if (savedState.syncProgress && savedState.extractProgress) {
+                  msg +=
+                    " (sync: " +
+                    savedState.syncProgress.done +
+                    ", extract: " +
+                    savedState.extractProgress.done +
+                    ")";
+                } else if (savedState.syncProgress) {
+                  msg += " (sync: " + savedState.syncProgress.done + ")";
+                } else if (savedState.extractProgress) {
+                  msg += " (extract: " + savedState.extractProgress.done + ")";
+                }
+                msg += ". Click Resume to continue from the next file.";
+                resultDiv.innerHTML =
+                  '<span class="result-placeholder-text">' +
+                  escapeHtml(msg) +
+                  "</span>";
+              }
+
+              setOtherRowsInactive(
+                caseRow,
+                "Resume the stopped process or reset it to enable other runs",
+              );
+            })
+            .catch(function () {});
+        });
       })();
       (function initDownloadBar() {
         var container = document.getElementById("download-bar-btns");
@@ -2130,6 +2507,23 @@
         }
         addReportBtn("Summary Report", "html");
         addReportBtn("Extraction Results", "json");
+      })();
+
+      (function initScheduleButton() {
+        var bar = document.getElementById("download-bar");
+        if (!bar) return;
+        var btns = document.getElementById("download-bar-btns");
+        var scheduleBtn = document.createElement("button");
+        scheduleBtn.type = "button";
+        scheduleBtn.textContent = "Schedule Extraction";
+        scheduleBtn.className =
+          "download-report-btn download-report-schedule-btn";
+        scheduleBtn.style.marginLeft = "auto";
+        scheduleBtn.onclick = function () {
+          openScheduleModal();
+        };
+        bar.appendChild(scheduleBtn);
+        initScheduleModal();
       })();
       document
         .querySelectorAll(".limit-sync, .limit-extract")
@@ -2320,6 +2714,572 @@
         });
         updateFilterDropdownTrigger("purchaser");
       }
+
+      function initScheduleModal() {
+        var overlay = document.getElementById("schedule-modal-overlay");
+        var body = document.getElementById("schedule-modal-body");
+        var closeIcon = document.getElementById("schedule-modal-close-icon");
+        if (!overlay || !body) return;
+        function close() {
+          overlay.classList.remove("open");
+          overlay.setAttribute("aria-hidden", "true");
+        }
+        if (closeIcon) closeIcon.onclick = close;
+        overlay.addEventListener("click", function (e) {
+          if (e.target === overlay) close();
+        });
+      }
+
+      function openScheduleModal() {
+        var overlay = document.getElementById("schedule-modal-overlay");
+        var body = document.getElementById("schedule-modal-body");
+        if (!overlay || !body) return;
+        overlay.classList.add("open");
+        overlay.setAttribute("aria-hidden", "false");
+        loadSchedulesIntoModal();
+      }
+
+      function renderScheduleListView(state) {
+        var body = document.getElementById("schedule-modal-body");
+        if (!body) return;
+        var schedules =
+          state && Array.isArray(state.schedules) ? state.schedules : [];
+        var tz = state && Array.isArray(state.timezones) ? state.timezones : [];
+        var html =
+          '<div class="schedule-header-row"><div>Manage scheduled sync &amp; extraction jobs.</div><div style="display:flex;gap:0.51rem;flex-wrap:wrap;"><button type="button" id="schedule-history-btn" class="btn-secondary">History</button><button type="button" id="schedule-create-btn" class="download-report-btn download-report-schedule-btn">Create a Schedule</button></div></div><div style="flex:1;display:flex;flex-direction:column;min-height:0;">';
+        if (!schedules.length) {
+          html +=
+            '<div class="schedule-empty">No schedules created. Please create a schedule.</div>';
+        } else {
+          html +=
+            '<div style="flex:1;overflow-y:auto;"><table class="schedule-list"><thead><tr><th>Brand</th><th>Purchaser</th><th>Time (cron)</th><th>Timezone</th><th>Created</th><th>Actions</th></tr></thead><tbody>';
+          schedules.forEach(function (s) {
+            var brands =
+              s.brands && s.brands.length ? s.brands.join(", ") : "All";
+            var purchasers =
+              s.purchasers && s.purchasers.length
+                ? s.purchasers.join(", ")
+                : "All";
+            html +=
+              "<tr data-sched-id='" +
+              escapeHtml(s.id || "") +
+              "'><td>" +
+              escapeHtml(brands) +
+              "</td><td>" +
+              escapeHtml(purchasers) +
+              "</td><td>" +
+              escapeHtml(s.cron) +
+              "</td><td>" +
+              escapeHtml(s.timezone) +
+              "</td><td>" +
+              escapeHtml(s.createdAt || "") +
+              '</td><td><div style="display:flex;flex-wrap:wrap;gap:0.51rem;">' +
+              '<button type="button" class="btn-secondary" data-sched-edit>Edit</button>' +
+              '<button type="button" class="btn-secondary" data-sched-delete>Delete</button>' +
+              "</div></td></tr>";
+          });
+          html += "</tbody></table></div>";
+        }
+        html += "</div>";
+        body.innerHTML = html;
+        var createBtn = document.getElementById("schedule-create-btn");
+        if (createBtn) {
+          createBtn.onclick = function () {
+            renderScheduleCreateForm(tz);
+          };
+        }
+        var historyBtn = document.getElementById("schedule-history-btn");
+        if (historyBtn) {
+          historyBtn.onclick = function () {
+            renderReportsHistoryView();
+          };
+        }
+        body.querySelectorAll("[data-sched-edit]").forEach(function (btn) {
+          btn.addEventListener("click", function () {
+            var tr = btn.closest("tr");
+            var id = tr && tr.getAttribute("data-sched-id");
+            if (!id) return;
+            var sched = schedules.find(function (s) {
+              return s.id === id;
+            });
+            if (!sched) return;
+            renderScheduleCreateForm(tz, sched);
+          });
+        });
+        body.querySelectorAll("[data-sched-delete]").forEach(function (btn) {
+          btn.addEventListener("click", function () {
+            var tr = btn.closest("tr");
+            var id = tr && tr.getAttribute("data-sched-id");
+            if (!id) return;
+            if (!window.confirm("Delete this schedule? This cannot be undone."))
+              return;
+            deleteSchedule(id);
+          });
+        });
+      }
+
+      function getSelectedScheduleBrands() {
+        var panel = document.getElementById("sched-brand-dropdown-panel");
+        if (!panel) return [];
+        return Array.from(
+          panel.querySelectorAll("input[type=checkbox]:checked"),
+        ).map(function (cb) {
+          return cb.value;
+        });
+      }
+      function getSelectedSchedulePurchasers() {
+        var panel = document.getElementById("sched-purchaser-dropdown-panel");
+        if (!panel) return [];
+        return Array.from(
+          panel.querySelectorAll("input[type=checkbox]:checked"),
+        ).map(function (cb) {
+          return cb.value;
+        });
+      }
+      function updateScheduleDropdownTrigger(type) {
+        var trigger = document.getElementById(
+          type === "brand"
+            ? "sched-brand-dropdown-trigger"
+            : "sched-purchaser-dropdown-trigger",
+        );
+        if (!trigger) return;
+        var selected =
+          type === "brand"
+            ? getSelectedScheduleBrands()
+            : getSelectedSchedulePurchasers();
+        if (selected.length === 0) {
+          trigger.textContent =
+            type === "brand" ? "Select brand" : "Select purchaser";
+        } else if (selected.length === 1) {
+          trigger.textContent = selected[0];
+        } else {
+          trigger.textContent = selected.length + " selected";
+        }
+      }
+      function refreshSchedulePurchaserOptions() {
+        var panel = document.getElementById("sched-purchaser-dropdown-panel");
+        var trigger = document.getElementById(
+          "sched-purchaser-dropdown-trigger",
+        );
+        if (!panel || !trigger) return;
+        var brands = getSelectedScheduleBrands();
+        var opts =
+          brands.length === 0
+            ? ALL_PURCHASERS
+            : (function () {
+                var set = new Set();
+                brands.forEach(function (b) {
+                  (BRAND_PURCHASERS[b] || []).forEach(function (p) {
+                    set.add(p);
+                  });
+                });
+                return Array.from(set).sort();
+              })();
+        var currentChecked = getSelectedSchedulePurchasers();
+        panel.innerHTML = opts
+          .map(function (p) {
+            var checked = currentChecked.indexOf(p) !== -1 ? " checked" : "";
+            return (
+              '<label class="filter-dropdown-option"><input type="checkbox" value="' +
+              escapeHtml(p) +
+              '"' +
+              checked +
+              "> " +
+              escapeHtml(p) +
+              "</label>"
+            );
+          })
+          .join("");
+        panel.querySelectorAll("input[type=checkbox]").forEach(function (cb) {
+          cb.addEventListener("change", function () {
+            updateScheduleDropdownTrigger("purchaser");
+          });
+        });
+        updateScheduleDropdownTrigger("purchaser");
+      }
+      function renderScheduleCreateForm(timezones, schedule) {
+        var body = document.getElementById("schedule-modal-body");
+        if (!body) return;
+        var brands = Object.keys(BRAND_PURCHASERS || {});
+        var tz =
+          Array.isArray(timezones) && timezones.length ? timezones : ["UTC"];
+        var brandOptions = brands
+          .map(function (b) {
+            return (
+              '<label class="filter-dropdown-option"><input type="checkbox" value="' +
+              escapeHtml(b) +
+              '"> ' +
+              escapeHtml(b) +
+              "</label>"
+            );
+          })
+          .join("");
+        var cronOptions = "";
+        for (var h = 0; h < 24; h++) {
+          for (var m = 0; m < 60; m += 5) {
+            var displayHour = ((h + 11) % 12) + 1; // 0 -> 12, 13 -> 1
+            var ampm = h < 12 ? "AM" : "PM";
+            var minLabel = String(m).padStart(2, "0");
+            var label = displayHour + ":" + minLabel + " " + ampm;
+            var cronVal = String(m) + " " + String(h) + " * * *";
+            cronOptions +=
+              '<option value="' +
+              cronVal +
+              '">' +
+              escapeHtml(label) +
+              "</option>";
+          }
+        }
+        var tzOptions = tz
+          .map(function (z) {
+            return (
+              '<option value="' +
+              escapeHtml(z) +
+              '">' +
+              escapeHtml(z) +
+              "</option>"
+            );
+          })
+          .join("");
+        body.innerHTML =
+          '<div class="schedule-header-row"><div>' +
+          (schedule ? "Edit schedule." : "Create a new schedule.") +
+          "</div></div>" +
+          '<div style="flex:1;display:flex;flex-direction:column;min-height:0;overflow-y:auto;">' +
+          '<div class="schedule-form-grid">' +
+          '<div class="schedule-field"><label class="schedule-label" for="sched-brand-dropdown-trigger">Brand (optional)</label><div id="sched-brand-dropdown" class="filter-dropdown"><button type="button" id="sched-brand-dropdown-trigger" class="filter-dropdown-trigger" aria-haspopup="listbox" aria-expanded="false" title="Select one or more brands">Select brand</button><div id="sched-brand-dropdown-panel" class="filter-dropdown-panel" role="listbox">' +
+          brandOptions +
+          '</div></div><div class="schedule-hint">Leave empty to include all brands.</div></div>' +
+          '<div class="schedule-field"><label class="schedule-label" for="sched-purchaser-dropdown-trigger">Purchaser (optional)</label><div id="sched-purchaser-dropdown" class="filter-dropdown"><button type="button" id="sched-purchaser-dropdown-trigger" class="filter-dropdown-trigger" aria-haspopup="listbox" aria-expanded="false" title="Select one or more purchasers">Select purchaser</button><div id="sched-purchaser-dropdown-panel" class="filter-dropdown-panel" role="listbox"></div></div><div class="schedule-hint">Leave empty to include all purchasers. Options update based on selected brands.</div></div>' +
+          '<div class="schedule-field"><label class="schedule-label" for="sched-cron">Run time (daily)</label><select id="sched-cron" class="schedule-select">' +
+          cronOptions +
+          '</select><div class="schedule-hint">Runs once per day at the selected time (every minute interval options).</div></div>' +
+          '<div class="schedule-field"><label class="schedule-label" for="sched-tz">Timezone</label><select id="sched-tz" class="schedule-select">' +
+          tzOptions +
+          '</select><div class="schedule-hint">All runs use this timezone for the cron schedule.</div></div>' +
+          "</div>" +
+          '<div id="schedule-error" class="schedule-error"></div>' +
+          "</div>" +
+          '<div class="modal-footer" style="margin-top:0.85rem;"><button type="button" id="schedule-cancel-btn" class="btn-secondary">Cancel</button><button type="button" id="schedule-save-btn" class="download-report-btn download-report-schedule-btn">' +
+          (schedule ? "Update schedule" : "Save schedule") +
+          "</button></div>";
+        refreshSchedulePurchaserOptions();
+        var brandTrigger = document.getElementById(
+          "sched-brand-dropdown-trigger",
+        );
+        var brandPanel = document.getElementById("sched-brand-dropdown-panel");
+        var brandDropdown = document.getElementById("sched-brand-dropdown");
+        var purchaserTrigger = document.getElementById(
+          "sched-purchaser-dropdown-trigger",
+        );
+        var purchaserPanel = document.getElementById(
+          "sched-purchaser-dropdown-panel",
+        );
+        var purchaserDropdown = document.getElementById(
+          "sched-purchaser-dropdown",
+        );
+        function closeScheduleDropdowns() {
+          if (brandPanel) brandPanel.classList.remove("open");
+          if (purchaserPanel) purchaserPanel.classList.remove("open");
+          if (brandTrigger) brandTrigger.setAttribute("aria-expanded", "false");
+          if (purchaserTrigger)
+            purchaserTrigger.setAttribute("aria-expanded", "false");
+        }
+        function toggleScheduleDropdown(panel, trigger) {
+          var isOpen = panel && panel.classList.contains("open");
+          closeScheduleDropdowns();
+          if (!isOpen && panel && trigger) {
+            panel.classList.add("open");
+            trigger.setAttribute("aria-expanded", "true");
+          }
+        }
+        if (brandTrigger && brandPanel) {
+          brandTrigger.addEventListener("click", function (e) {
+            e.stopPropagation();
+            toggleScheduleDropdown(brandPanel, brandTrigger);
+          });
+        }
+        if (purchaserTrigger && purchaserPanel) {
+          purchaserTrigger.addEventListener("click", function (e) {
+            e.stopPropagation();
+            toggleScheduleDropdown(purchaserPanel, purchaserTrigger);
+          });
+        }
+        if (brandDropdown) {
+          brandDropdown.addEventListener("click", function (e) {
+            e.stopPropagation();
+          });
+        }
+        if (purchaserDropdown) {
+          purchaserDropdown.addEventListener("click", function (e) {
+            e.stopPropagation();
+          });
+        }
+        document.addEventListener("click", function () {
+          closeScheduleDropdowns();
+        });
+        brandPanel
+          .querySelectorAll("input[type=checkbox]")
+          .forEach(function (cb) {
+            cb.addEventListener("change", function () {
+              updateScheduleDropdownTrigger("brand");
+              refreshSchedulePurchaserOptions();
+            });
+          });
+        var cancelBtn = document.getElementById("schedule-cancel-btn");
+        if (cancelBtn) {
+          cancelBtn.onclick = function () {
+            loadSchedulesIntoModal();
+          };
+        }
+        var saveBtn = document.getElementById("schedule-save-btn");
+        if (saveBtn) {
+          saveBtn.onclick = function () {
+            submitScheduleForm(schedule);
+          };
+        }
+        if (schedule) {
+          var cronEl = document.getElementById("sched-cron");
+          var tzEl = document.getElementById("sched-tz");
+          if (schedule.brands && schedule.brands.length) {
+            schedule.brands.forEach(function (b) {
+              var cb = brandPanel.querySelector(
+                'input[type=checkbox][value="' + escapeHtml(b) + '"]',
+              );
+              if (cb) cb.checked = true;
+            });
+            updateScheduleDropdownTrigger("brand");
+            refreshSchedulePurchaserOptions();
+          }
+          if (schedule.purchasers && schedule.purchasers.length) {
+            schedule.purchasers.forEach(function (p) {
+              var cb = purchaserPanel.querySelector(
+                'input[type=checkbox][value="' + escapeHtml(p) + '"]',
+              );
+              if (cb) cb.checked = true;
+            });
+            updateScheduleDropdownTrigger("purchaser");
+          }
+          if (cronEl && schedule.cron) {
+            cronEl.value = schedule.cron;
+          }
+          if (tzEl && schedule.timezone) {
+            tzEl.value = schedule.timezone;
+          }
+        }
+      }
+
+      function loadSchedulesIntoModal() {
+        fetch("/api/schedules")
+          .then(function (r) {
+            if (!r.ok) throw new Error("Could not load schedules");
+            return r.json();
+          })
+          .then(function (data) {
+            renderScheduleListView({
+              schedules: data.schedules || [],
+              timezones: data.timezones || [],
+            });
+          })
+          .catch(function () {
+            renderScheduleListView({ schedules: [], timezones: ["UTC"] });
+          });
+      }
+
+      function renderReportsHistoryView() {
+        var body = document.getElementById("schedule-modal-body");
+        if (!body) return;
+        fetch("/api/reports")
+          .then(function (r) {
+            if (!r.ok) throw new Error("Could not load reports");
+            return r.json();
+          })
+          .then(function (list) {
+            var html =
+              '<div class="schedule-header-row">' +
+              '<div style="display:flex;gap:0.51rem;flex-wrap:wrap;">' +
+              '<button type="button" id="history-latest-summary" class="download-report-btn download-report-html-btn">Latest summary (HTML)</button>' +
+              '<button type="button" id="history-extractions-zip" class="download-report-btn download-report-json-btn">Latest extractions ZIP</button>' +
+              "</div>" +
+              '<button type="button" id="history-back-btn" class="btn-secondary">Back to Schedules</button>' +
+              "</div>" +
+              '<div style="flex:1;display:flex;flex-direction:column;min-height:0;">';
+            var runMap = {};
+            function extractRunId(filename) {
+              var match = filename.match(/^report_(.+?)_\d+\.(html|json)$/);
+              return match ? match[1] : null;
+            }
+            (list.html || []).forEach(function (r) {
+              var runId = extractRunId(r.name);
+              if (runId) {
+                if (
+                  !runMap[runId] ||
+                  (r.mtime || 0) < (runMap[runId].mtime || 0)
+                ) {
+                  runMap[runId] = {
+                    runId: runId,
+                    mtime: r.mtime || 0,
+                    htmlName: r.name,
+                    jsonName: null,
+                  };
+                } else if (runMap[runId]) {
+                  runMap[runId].htmlName = r.name;
+                  if ((r.mtime || 0) < (runMap[runId].mtime || 0)) {
+                    runMap[runId].mtime = r.mtime || 0;
+                  }
+                }
+              }
+            });
+            (list.json || []).forEach(function (r) {
+              var runId = extractRunId(r.name);
+              if (runId) {
+                if (!runMap[runId]) {
+                  runMap[runId] = {
+                    runId: runId,
+                    mtime: r.mtime || 0,
+                    htmlName: null,
+                    jsonName: r.name,
+                  };
+                } else {
+                  runMap[runId].jsonName = r.name;
+                  if ((r.mtime || 0) < (runMap[runId].mtime || 0)) {
+                    runMap[runId].mtime = r.mtime || 0;
+                  }
+                }
+              }
+            });
+            var items = Object.values(runMap);
+            items.sort(function (a, b) {
+              return (b.mtime || 0) - (a.mtime || 0);
+            });
+            if (!items.length) {
+              html +=
+                '<div class="schedule-empty">No reports available yet. Run or schedule an extraction to generate reports.</div>';
+            } else {
+              html +=
+                '<div style="flex:1;overflow-y:auto;"><table class="schedule-list"><thead><tr><th>Run ID</th><th>Executed At</th></tr></thead><tbody>';
+              items.forEach(function (it) {
+                var dateLabel = it.mtime
+                  ? new Date(it.mtime).toLocaleString()
+                  : "";
+                html +=
+                  "<tr><td>" +
+                  escapeHtml(it.runId) +
+                  "</td><td>" +
+                  escapeHtml(dateLabel) +
+                  "</td></tr>";
+              });
+              html += "</tbody></table></div>";
+            }
+            html += "</div>";
+            body.innerHTML = html;
+            var backBtn = document.getElementById("history-back-btn");
+            if (backBtn) {
+              backBtn.onclick = function () {
+                loadSchedulesIntoModal();
+              };
+            }
+            var latestSummaryBtn = document.getElementById(
+              "history-latest-summary",
+            );
+            if (latestSummaryBtn) {
+              latestSummaryBtn.onclick = function () {
+                downloadLatestReport(latestSummaryBtn, "html");
+              };
+            }
+            var extractionsZipBtn = document.getElementById(
+              "history-extractions-zip",
+            );
+            if (extractionsZipBtn) {
+              extractionsZipBtn.onclick = function () {
+                downloadExtractionsZip(extractionsZipBtn);
+              };
+            }
+          })
+          .catch(function () {
+            body.innerHTML =
+              '<div class="schedule-header-row"><div>Reports history</div><button type="button" id="history-back-btn" class="btn-secondary">Back to Schedules</button></div><div class="schedule-empty">Could not load reports.</div>';
+            var backBtn = document.getElementById("history-back-btn");
+            if (backBtn) {
+              backBtn.onclick = function () {
+                loadSchedulesIntoModal();
+              };
+            }
+          });
+      }
+
+      function deleteSchedule(id) {
+        fetch("/api/schedules/" + encodeURIComponent(id), {
+          method: "DELETE",
+        })
+          .then(function (r) {
+            if (!r.ok) {
+              throw new Error("Failed to delete schedule");
+            }
+            loadSchedulesIntoModal();
+          })
+          .catch(function () {
+            // Best effort; keep current view if delete fails.
+          });
+      }
+
+      function submitScheduleForm(schedule) {
+        var cronEl = document.getElementById("sched-cron");
+        var tzEl = document.getElementById("sched-tz");
+        var errorEl = document.getElementById("schedule-error");
+        if (!cronEl || !tzEl || !errorEl) return;
+        var brands = getSelectedScheduleBrands();
+        var purchasers = getSelectedSchedulePurchasers();
+        var cron = (cronEl.value || "").trim();
+        var timezone = (tzEl.value || "").trim();
+        errorEl.textContent = "";
+        if (brands.length === 0 && purchasers.length === 0) {
+          errorEl.textContent =
+            "Please select at least one brand or purchaser.";
+          return;
+        }
+        if (!cron) {
+          errorEl.textContent = "Run time is required.";
+          return;
+        }
+        if (!timezone) {
+          errorEl.textContent = "Timezone is required.";
+          return;
+        }
+        var url = "/api/schedules";
+        var method = "POST";
+        if (schedule && schedule.id) {
+          url = "/api/schedules/" + encodeURIComponent(schedule.id);
+          method = "PUT";
+        }
+        fetch(url, {
+          method: method,
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            brands: brands,
+            purchasers: purchasers,
+            cron: cron,
+            timezone: timezone,
+          }),
+        })
+          .then(function (r) {
+            if (!r.ok) {
+              return r.json().then(function (err) {
+                throw new Error(
+                  err && err.error ? err.error : "Failed to save schedule",
+                );
+              });
+            }
+            return r.json();
+          })
+          .then(function () {
+            loadSchedulesIntoModal();
+          })
+          .catch(function (e) {
+            errorEl.textContent =
+              e && e.message ? e.message : "Failed to save schedule.";
+          });
+      }
       function clearResumeStateFromAllRows() {
         var tbody = document.getElementById("rows");
         if (!tbody) return;
@@ -2487,6 +3447,70 @@
           });
         fetchConfig();
       })();
+      window.stopBackgroundJob = function (caseId) {
+        if (confirm("Are you sure you want to stop auto extraction?")) {
+          var resultDiv = document.getElementById("result-" + caseId);
+          var tbody = document.getElementById("rows");
+          var caseRow = tbody
+            ? tbody.querySelector('tr[data-case-id="' + caseId + '"]')
+            : null;
+          var resetBtn = caseRow
+            ? caseRow.querySelector(
+                "button.reset-case:not(.reset-during-resume)",
+              )
+            : null;
+
+          if (resetBtn) {
+            resetBtn.disabled = true;
+            resetBtn.textContent = "Stopping...";
+          }
+
+          fetch("/api/stop-run", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ caseId: caseId, origin: "scheduled" }),
+          })
+            .then(function (r) {
+              return r.json();
+            })
+            .then(function (data) {
+              if (data.error) {
+                alert("Error stopping auto extraction: " + data.error);
+                if (resetBtn) {
+                  resetBtn.disabled = false;
+                  resetBtn.textContent = "Stop Auto Extraction";
+                }
+              } else {
+                // Success — reset UI back to default state
+                if (resultDiv) {
+                  resultDiv.className = "result result-placeholder";
+                  resultDiv.innerHTML =
+                    '<span class="result-placeholder-text">Select at least one brand or purchaser in the filter above, then click Run.</span>';
+                }
+                if (resetBtn) {
+                  resetBtn.disabled = false;
+                  resetBtn.textContent = "Reset";
+                  resetBtn.classList.remove("stop-btn");
+                  resetBtn.onclick = function () {
+                    resetCase(resultDiv);
+                  };
+                }
+                var runBtn = caseRow
+                  ? caseRow.querySelector("button.run")
+                  : null;
+                if (runBtn) runBtn.disabled = false;
+                setOtherRowsActive();
+              }
+            })
+            .catch(function (e) {
+              alert("Network error: " + e.message);
+              if (resetBtn) {
+                resetBtn.disabled = false;
+                resetBtn.textContent = "Stop Auto Extraction";
+              }
+            });
+        }
+      };
     </script>
   </body>
 </html>

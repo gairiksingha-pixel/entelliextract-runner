@@ -27,6 +27,7 @@ import {
   relative,
 } from "node:path";
 import { fileURLToPath } from "node:url";
+import cron from "node-cron";
 
 const require = createRequire(import.meta.url);
 const archiver = require("archiver");
@@ -84,6 +85,115 @@ const LAST_RUN_COMPLETED_PATH = join(
   "last-run-completed.txt",
 );
 const ALLOWED_EXT = new Set([".html", ".json"]);
+
+const SCHEDULES_PATH = join(ROOT, "output", "checkpoints", "schedules.json");
+const LAST_RUN_STATE_PATH = join(
+  ROOT,
+  "output",
+  "checkpoints",
+  "last-run-state.json",
+);
+
+// Active process tracking
+const ACTIVE_RUNS = new Map();
+
+// Define which cases support resume functionality
+const RESUME_CAPABLE_CASES = new Set(["P1", "P2", "PIPE", "P5", "P6"]);
+
+function loadSchedules() {
+  if (!existsSync(SCHEDULES_PATH)) return [];
+  try {
+    const raw = readFileSync(SCHEDULES_PATH, "utf-8");
+    const data = JSON.parse(raw);
+    return Array.isArray(data) ? data : [];
+  } catch (_) {
+    return [];
+  }
+}
+
+function saveSchedules(list) {
+  try {
+    const dir = dirname(SCHEDULES_PATH);
+    if (!existsSync(dir)) mkdirSync(dir, { recursive: true });
+    writeFileSync(SCHEDULES_PATH, JSON.stringify(list, null, 2), "utf-8");
+  } catch (_) {}
+}
+
+function scheduleId() {
+  const now = new Date();
+  const pad = (n) => String(n).padStart(2, "0");
+  const base =
+    now.getFullYear() +
+    "-" +
+    pad(now.getMonth() + 1) +
+    "-" +
+    pad(now.getDate()) +
+    "T" +
+    pad(now.getHours()) +
+    ":" +
+    pad(now.getMinutes()) +
+    ":" +
+    pad(now.getSeconds());
+  const rand = Math.random().toString(36).slice(2, 6);
+  return "sched_" + base + "_" + rand;
+}
+
+function getPairsForSchedule(brands, purchasers) {
+  let brandList = Array.isArray(brands) ? brands.filter(Boolean) : [];
+  let purchaserList = Array.isArray(purchasers)
+    ? purchasers.filter(Boolean)
+    : [];
+
+  if (brandList.length === 0 && purchaserList.length === 0) return [];
+  if (brandList.length === 0) brandList = Object.keys(BRAND_PURCHASERS || {});
+  if (purchaserList.length === 0) {
+    const set = new Set();
+    brandList.forEach((b) => {
+      (BRAND_PURCHASERS[b] || []).forEach((p) => set.add(p));
+    });
+    purchaserList = Array.from(set);
+  }
+
+  const pairs = [];
+  brandList.forEach((tenant) => {
+    const allowed = BRAND_PURCHASERS[tenant];
+    if (!allowed) return;
+    purchaserList.forEach((purchaser) => {
+      if (allowed.indexOf(purchaser) !== -1) {
+        pairs.push({ tenant, purchaser });
+      }
+    });
+  });
+  return pairs;
+}
+
+const SCHEDULE_TIMEZONES = [
+  "UTC",
+  // US time zones (includes PST/PDT via America/Los_Angeles)
+  "America/Los_Angeles",
+  "America/Chicago",
+  "America/New_York",
+  "Europe/London",
+  // India Standard Time
+  "Asia/Kolkata",
+];
+
+const SCHEDULE_LOG_PATH = join(ROOT, "output", "logs", "schedule.log");
+
+function appendScheduleLog(entry) {
+  try {
+    const dir = dirname(SCHEDULE_LOG_PATH);
+    if (!existsSync(dir)) mkdirSync(dir, { recursive: true });
+    const line = JSON.stringify({
+      timestamp: new Date().toISOString(),
+      ...entry,
+    });
+    writeFileSync(SCHEDULE_LOG_PATH, line + "\n", {
+      encoding: "utf-8",
+      flag: "a",
+    });
+  } catch (_) {}
+}
 
 function getCurrentRunIdFromCheckpoint() {
   const path = existsSync(CHECKPOINT_JSON_PATH)
@@ -175,6 +285,46 @@ function spawnReportForRunId(runId) {
     child.on("close", (code) => resolve(code));
     child.on("error", () => resolve(1));
   });
+}
+
+// State management functions
+function loadRunStates() {
+  if (!existsSync(LAST_RUN_STATE_PATH)) return {};
+  try {
+    const raw = readFileSync(LAST_RUN_STATE_PATH, "utf-8");
+    return JSON.parse(raw);
+  } catch (_) {
+    return {};
+  }
+}
+
+function saveRunStates(states) {
+  try {
+    const dir = dirname(LAST_RUN_STATE_PATH);
+    if (!existsSync(dir)) mkdirSync(dir, { recursive: true });
+    writeFileSync(
+      LAST_RUN_STATE_PATH,
+      JSON.stringify(states, null, 2),
+      "utf-8",
+    );
+  } catch (_) {}
+}
+
+function updateRunState(caseId, stateUpdate) {
+  const states = loadRunStates();
+  states[caseId] = { ...states[caseId], ...stateUpdate };
+  saveRunStates(states);
+}
+
+function clearRunState(caseId) {
+  const states = loadRunStates();
+  delete states[caseId];
+  saveRunStates(states);
+}
+
+function getRunState(caseId) {
+  const states = loadRunStates();
+  return states[caseId] || null;
 }
 
 function listStagingFiles(dir, baseDir, list) {
@@ -471,6 +621,127 @@ const MIME = {
   ".svg": "image/svg+xml",
   ".ico": "image/x-icon",
 };
+
+const ACTIVE_CRON_JOBS = new Map();
+// Track running child processes to allow stopping them
+const CHILD_PROCESSES = new Map(); // Key: runKey (caseId or caseId:scheduled), Value: ChildProcess
+
+function registerScheduleJob(schedule) {
+  if (!schedule || !schedule.id || !schedule.cron || !schedule.timezone) {
+    return;
+  }
+  if (!cron.validate(schedule.cron)) {
+    appendScheduleLog({
+      level: "warn",
+      message: "Invalid cron expression for schedule; skipping",
+      scheduleId: schedule.id,
+      cron: schedule.cron,
+    });
+    return;
+  }
+  if (!SCHEDULE_TIMEZONES.includes(schedule.timezone)) {
+    appendScheduleLog({
+      level: "warn",
+      message: "Invalid timezone for schedule; skipping",
+      scheduleId: schedule.id,
+      timezone: schedule.timezone,
+    });
+    return;
+  }
+  if (ACTIVE_CRON_JOBS.has(schedule.id)) {
+    try {
+      ACTIVE_CRON_JOBS.get(schedule.id).stop();
+    } catch (_) {}
+    ACTIVE_CRON_JOBS.delete(schedule.id);
+  }
+
+  const task = cron.schedule(
+    schedule.cron,
+    async () => {
+      const caseId = "PIPE"; // Cron jobs always run PIPE
+      const start = new Date().toISOString();
+
+      appendScheduleLog({
+        level: "info",
+        message: "Scheduled job started",
+        scheduleId: schedule.id,
+        start,
+      });
+
+      const pairs = getPairsForSchedule(
+        schedule.brands || [],
+        schedule.purchasers || [],
+      );
+      const params = {};
+      if (pairs.length > 0) {
+        params.pairs = pairs;
+      }
+
+      // Track state like /run endpoint does
+      // Track state like /run endpoint does
+      const runInfo = {
+        caseId,
+        params,
+        startTime: start,
+        status: "running",
+        scheduled: true, // Mark as cron job
+        origin: "scheduled", // Explicitly mark as scheduled run
+        scheduleId: schedule.id,
+      };
+      // Use distinct key to allow manual run to coexist
+      const activeRunKey = `${caseId}:scheduled`;
+      ACTIVE_RUNS.set(activeRunKey, runInfo);
+
+      // NOTE: We do NOT call updateRunState here because we don't want
+      // scheduled jobs to be resumable via the UI "Resume" button.
+
+      try {
+        const result = await runCase(
+          caseId,
+          params,
+          {
+            onChild: (child) => {
+              CHILD_PROCESSES.set(activeRunKey, child);
+            },
+          },
+          null,
+        );
+
+        // Clean up active run tracking
+        ACTIVE_RUNS.delete(activeRunKey);
+        CHILD_PROCESSES.delete(activeRunKey);
+
+        appendScheduleLog({
+          level: "info",
+          message: "Scheduled job finished",
+          scheduleId: schedule.id,
+          exitCode: result.exitCode,
+        });
+      } catch (e) {
+        // Clean up on error
+        ACTIVE_RUNS.delete(activeRunKey);
+        CHILD_PROCESSES.delete(activeRunKey);
+
+        appendScheduleLog({
+          level: "error",
+          message: "Scheduled job failed",
+          scheduleId: schedule.id,
+          error: e && e.message ? e.message : String(e),
+        });
+      }
+    },
+    {
+      scheduled: true,
+      timezone: schedule.timezone,
+    },
+  );
+  ACTIVE_CRON_JOBS.set(schedule.id, task);
+}
+
+function bootstrapSchedules() {
+  const list = loadSchedules();
+  list.forEach((s) => registerScheduleJob(s));
+}
 createServer(async (req, res) => {
   const url = req.url?.split("?")[0] || "/";
   if (req.method === "GET" && url.startsWith("/assets/")) {
@@ -579,6 +850,17 @@ createServer(async (req, res) => {
         } catch (_) {}
       }
 
+      // Track active run
+      const runInfo = {
+        caseId,
+        params,
+        startTime: new Date().toISOString(),
+        status: "running",
+        origin: "manual", // Explicitly mark as manual run
+      };
+      ACTIVE_RUNS.set(caseId, runInfo);
+      updateRunState(caseId, runInfo);
+
       res.writeHead(200, {
         "Content-Type": "application/x-ndjson",
         "Transfer-Encoding": "chunked",
@@ -599,15 +881,32 @@ createServer(async (req, res) => {
         {
           onChild: (child) => {
             currentChild = child;
+            CHILD_PROCESSES.set(caseId, child);
           },
           onProgress: (percent, done, total) => {
             writeLine({ type: "progress", percent, done, total });
+            // Update progress in active run tracking
+            const activeRun = ACTIVE_RUNS.get(caseId);
+            if (activeRun) {
+              activeRun.progress = { percent, done, total };
+              ACTIVE_RUNS.set(caseId, activeRun);
+            }
           },
           onSyncProgress: (done, total) => {
             writeLine({ type: "sync_progress", done, total });
+            const activeRun = ACTIVE_RUNS.get(caseId);
+            if (activeRun) {
+              activeRun.syncProgress = { done, total };
+              ACTIVE_RUNS.set(caseId, activeRun);
+            }
           },
           onExtractionProgress: (done, total) => {
             writeLine({ type: "extraction_progress", done, total });
+            const activeRun = ACTIVE_RUNS.get(caseId);
+            if (activeRun) {
+              activeRun.extractProgress = { done, total };
+              ACTIVE_RUNS.set(caseId, activeRun);
+            }
           },
           onResumeSkip: (skipped, total) => {
             writeLine({ type: "resume_skip", skipped, total });
@@ -624,19 +923,329 @@ createServer(async (req, res) => {
         result.exitCode === 143 ||
         result.exitCode === 130 ||
         result.signal === "SIGTERM";
+
+      // Clean up active run tracking
+      CHILD_PROCESSES.delete(caseId);
+      ACTIVE_RUNS.delete(caseId);
+
       if (interrupted) {
+        // Process was stopped/interrupted - update state for resume
         const runId = getCurrentRunIdFromCheckpoint();
         if (runId) spawnReportForRunId(runId).catch(() => {});
+
+        // Only save resume state for cases that support it
+        if (RESUME_CAPABLE_CASES.has(caseId)) {
+          const stateUpdate = {
+            status: "stopped",
+            stoppedTime: new Date().toISOString(),
+            params,
+          };
+          // Add progress info if available
+          const activeRun = ACTIVE_RUNS.get(caseId);
+          if (activeRun) {
+            if (activeRun.syncProgress)
+              stateUpdate.syncProgress = activeRun.syncProgress;
+            if (activeRun.extractProgress)
+              stateUpdate.extractProgress = activeRun.extractProgress;
+          }
+          updateRunState(caseId, stateUpdate);
+        } else {
+          // For cases that don't support resume, clear the state
+          clearRunState(caseId);
+        }
       } else if (result.exitCode === 0) {
+        // Process completed successfully
         const runId = getCurrentRunIdFromCheckpoint();
         if (runId) markRunCompleted(runId);
+        // Clear run state on successful completion
+        clearRunState(caseId);
+      } else {
+        // Process failed - clear state
+        clearRunState(caseId);
       }
+
       if (!res.destroyed) {
         try {
           writeLine({ type: "result", ...result });
           res.end();
         } catch (_) {}
       }
+    } catch (e) {
+      // Best effort cleanup
+      try {
+        const cid = JSON.parse(body || "{}").caseId;
+        if (cid) {
+          CHILD_PROCESSES.delete(cid);
+          ACTIVE_RUNS.delete(cid);
+        }
+      } catch (_) {}
+
+      res.writeHead(500, { "Content-Type": "application/json" });
+      res.end(JSON.stringify({ error: String(e.message) }));
+    }
+    return;
+  }
+  if (req.method === "POST" && url === "/api/stop-run") {
+    let body = "";
+    for await (const chunk of req) body += chunk;
+    try {
+      const { caseId, origin } = JSON.parse(body || "{}");
+      if (!caseId) {
+        res.writeHead(400, { "Content-Type": "application/json" });
+        res.end(JSON.stringify({ error: "Missing caseId" }));
+        return;
+      }
+
+      const runKey = origin === "scheduled" ? `${caseId}:scheduled` : caseId;
+      const child = CHILD_PROCESSES.get(runKey);
+
+      if (child) {
+        child.kill("SIGTERM");
+        // Cleanup happens in close handler of child process spawned in runCase
+
+        res.writeHead(200, { "Content-Type": "application/json" });
+        res.end(JSON.stringify({ success: true, message: "Stop signal sent" }));
+      } else {
+        res.writeHead(404, { "Content-Type": "application/json" });
+        res.end(JSON.stringify({ error: "Process not found", runKey }));
+      }
+    } catch (e) {
+      res.writeHead(500, { "Content-Type": "application/json" });
+      res.end(JSON.stringify({ error: String(e.message) }));
+    }
+    return;
+  }
+  if (req.method === "GET" && url === "/api/active-runs") {
+    try {
+      const runs = Array.from(ACTIVE_RUNS.values());
+      res.writeHead(200, { "Content-Type": "application/json" });
+      res.end(JSON.stringify({ activeRuns: runs }));
+    } catch (e) {
+      res.writeHead(500, { "Content-Type": "application/json" });
+      res.end(JSON.stringify({ error: String(e.message) }));
+    }
+    return;
+  }
+  if (req.method === "GET" && url.startsWith("/api/run-status")) {
+    try {
+      // Parse query parameter for case ID if provided
+      const urlObj = new URL(req.url, `http://${req.headers.host}`);
+      const queryCaseId = urlObj.searchParams.get("caseId");
+
+      if (queryCaseId) {
+        // Return status for specific case
+        const state = getRunState(queryCaseId);
+        const isActive = ACTIVE_RUNS.has(queryCaseId);
+        const canResume =
+          state &&
+          state.status === "stopped" &&
+          RESUME_CAPABLE_CASES.has(queryCaseId);
+
+        res.writeHead(200, { "Content-Type": "application/json" });
+        res.end(
+          JSON.stringify({
+            caseId: queryCaseId,
+            isRunning: isActive,
+            canResume,
+            state: state || {},
+          }),
+        );
+      } else {
+        // Return PIPE status for backward compatibility
+        const pipelineStatus = getRunStatusFromCheckpoint();
+        res.writeHead(200, { "Content-Type": "application/json" });
+        res.end(JSON.stringify(pipelineStatus));
+      }
+    } catch (e) {
+      res.writeHead(500, { "Content-Type": "application/json" });
+      res.end(JSON.stringify({ error: String(e.message) }));
+    }
+    return;
+  }
+  if (req.method === "GET" && url === "/api/schedules") {
+    try {
+      const list = loadSchedules();
+      res.writeHead(200, { "Content-Type": "application/json" });
+      res.end(
+        JSON.stringify({ schedules: list, timezones: SCHEDULE_TIMEZONES }),
+      );
+    } catch (e) {
+      res.writeHead(500, { "Content-Type": "application/json" });
+      res.end(JSON.stringify({ error: String(e.message) }));
+    }
+    return;
+  }
+  if (req.method === "POST" && url === "/api/schedules") {
+    let body = "";
+    for await (const chunk of req) body += chunk;
+    try {
+      const {
+        brands,
+        purchasers,
+        cron: cronExpr,
+        timezone,
+      } = JSON.parse(body || "{}");
+      const brandList = Array.isArray(brands)
+        ? brands.filter((b) => typeof b === "string" && b.trim() !== "")
+        : [];
+      const purchaserList = Array.isArray(purchasers)
+        ? purchasers.filter((p) => typeof p === "string" && p.trim() !== "")
+        : [];
+      if (brandList.length === 0 && purchaserList.length === 0) {
+        res.writeHead(400, { "Content-Type": "application/json" });
+        res.end(
+          JSON.stringify({
+            error: "Please select at least one brand or purchaser.",
+          }),
+        );
+        return;
+      }
+      if (
+        !cronExpr ||
+        typeof cronExpr !== "string" ||
+        !cron.validate(cronExpr)
+      ) {
+        res.writeHead(400, { "Content-Type": "application/json" });
+        res.end(
+          JSON.stringify({
+            error:
+              "Invalid cron expression. Use standard 5-field syntax like '0 * * * *'.",
+          }),
+        );
+        return;
+      }
+      if (
+        !timezone ||
+        typeof timezone !== "string" ||
+        !SCHEDULE_TIMEZONES.includes(timezone)
+      ) {
+        res.writeHead(400, { "Content-Type": "application/json" });
+        res.end(
+          JSON.stringify({
+            error: "Invalid timezone. Please choose a value from the dropdown.",
+          }),
+        );
+        return;
+      }
+      const list = loadSchedules();
+      const sched = {
+        id: scheduleId(),
+        createdAt: new Date().toISOString(),
+        brands: brandList,
+        purchasers: purchaserList,
+        cron: cronExpr,
+        timezone,
+      };
+      list.push(sched);
+      saveSchedules(list);
+      registerScheduleJob(sched);
+      res.writeHead(201, { "Content-Type": "application/json" });
+      res.end(JSON.stringify(sched));
+    } catch (e) {
+      res.writeHead(500, { "Content-Type": "application/json" });
+      res.end(JSON.stringify({ error: String(e.message) }));
+    }
+    return;
+  }
+  if (req.method === "PUT" && url.startsWith("/api/schedules/")) {
+    let body = "";
+    for await (const chunk of req) body += chunk;
+    try {
+      const id = decodeURIComponent(url.slice("/api/schedules/".length));
+      const {
+        brands,
+        purchasers,
+        cron: cronExpr,
+        timezone,
+      } = JSON.parse(body || "{}");
+      const brandList = Array.isArray(brands)
+        ? brands.filter((b) => typeof b === "string" && b.trim() !== "")
+        : [];
+      const purchaserList = Array.isArray(purchasers)
+        ? purchasers.filter((p) => typeof p === "string" && p.trim() !== "")
+        : [];
+      if (brandList.length === 0 && purchaserList.length === 0) {
+        res.writeHead(400, { "Content-Type": "application/json" });
+        res.end(
+          JSON.stringify({
+            error: "Please select at least one brand or purchaser.",
+          }),
+        );
+        return;
+      }
+      if (
+        !cronExpr ||
+        typeof cronExpr !== "string" ||
+        !cron.validate(cronExpr)
+      ) {
+        res.writeHead(400, { "Content-Type": "application/json" });
+        res.end(
+          JSON.stringify({
+            error:
+              "Invalid cron expression. Use standard 5-field syntax like '0 * * * *'.",
+          }),
+        );
+        return;
+      }
+      if (
+        !timezone ||
+        typeof timezone !== "string" ||
+        !SCHEDULE_TIMEZONES.includes(timezone)
+      ) {
+        res.writeHead(400, { "Content-Type": "application/json" });
+        res.end(
+          JSON.stringify({
+            error: "Invalid timezone. Please choose a value from the dropdown.",
+          }),
+        );
+        return;
+      }
+      const list = loadSchedules();
+      const idx = list.findIndex((s) => s.id === id);
+      if (idx === -1) {
+        res.writeHead(404, { "Content-Type": "application/json" });
+        res.end(JSON.stringify({ error: "Schedule not found" }));
+        return;
+      }
+      const updated = {
+        ...list[idx],
+        brands: brandList,
+        purchasers: purchaserList,
+        cron: cronExpr,
+        timezone,
+      };
+      list[idx] = updated;
+      saveSchedules(list);
+      registerScheduleJob(updated);
+      res.writeHead(200, { "Content-Type": "application/json" });
+      res.end(JSON.stringify(updated));
+    } catch (e) {
+      res.writeHead(500, { "Content-Type": "application/json" });
+      res.end(JSON.stringify({ error: String(e.message) }));
+    }
+    return;
+  }
+  if (req.method === "DELETE" && url.startsWith("/api/schedules/")) {
+    try {
+      const id = decodeURIComponent(url.slice("/api/schedules/".length));
+      const list = loadSchedules();
+      const idx = list.findIndex((s) => s.id === id);
+      if (idx === -1) {
+        res.writeHead(404, { "Content-Type": "application/json" });
+        res.end(JSON.stringify({ error: "Schedule not found" }));
+        return;
+      }
+      list.splice(idx, 1);
+      saveSchedules(list);
+      const job = ACTIVE_CRON_JOBS.get(id);
+      if (job) {
+        try {
+          job.stop();
+        } catch (_) {}
+        ACTIVE_CRON_JOBS.delete(id);
+      }
+      res.writeHead(204);
+      res.end();
     } catch (e) {
       res.writeHead(500, { "Content-Type": "application/json" });
       res.end(JSON.stringify({ error: String(e.message) }));
@@ -805,4 +1414,5 @@ createServer(async (req, res) => {
 }).listen(PORT, () => {
   console.log(`IntelliExtract app: http://localhost:${PORT}/`);
   console.log("Open in browser, select Brand/Purchaser, then click Run.");
+  bootstrapSchedules();
 });
