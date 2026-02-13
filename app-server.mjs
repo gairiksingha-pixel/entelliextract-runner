@@ -27,6 +27,7 @@ import {
   relative,
 } from "node:path";
 import { fileURLToPath } from "node:url";
+import cron from "node-cron";
 
 const require = createRequire(import.meta.url);
 const archiver = require("archiver");
@@ -84,6 +85,107 @@ const LAST_RUN_COMPLETED_PATH = join(
   "last-run-completed.txt",
 );
 const ALLOWED_EXT = new Set([".html", ".json"]);
+
+const SCHEDULES_PATH = join(
+  ROOT,
+  "output",
+  "checkpoints",
+  "schedules.json",
+);
+
+function loadSchedules() {
+  if (!existsSync(SCHEDULES_PATH)) return [];
+  try {
+    const raw = readFileSync(SCHEDULES_PATH, "utf-8");
+    const data = JSON.parse(raw);
+    return Array.isArray(data) ? data : [];
+  } catch (_) {
+    return [];
+  }
+}
+
+function saveSchedules(list) {
+  try {
+    const dir = dirname(SCHEDULES_PATH);
+    if (!existsSync(dir)) mkdirSync(dir, { recursive: true });
+    writeFileSync(SCHEDULES_PATH, JSON.stringify(list, null, 2), "utf-8");
+  } catch (_) {}
+}
+
+function scheduleId() {
+  const now = new Date();
+  const pad = (n) => String(n).padStart(2, "0");
+  const base =
+    now.getFullYear() +
+    "-" +
+    pad(now.getMonth() + 1) +
+    "-" +
+    pad(now.getDate()) +
+    "T" +
+    pad(now.getHours()) +
+    ":" +
+    pad(now.getMinutes()) +
+    ":" +
+    pad(now.getSeconds());
+  const rand = Math.random().toString(36).slice(2, 6);
+  return "sched_" + base + "_" + rand;
+}
+
+function getPairsForSchedule(brands, purchasers) {
+  let brandList = Array.isArray(brands) ? brands.filter(Boolean) : [];
+  let purchaserList = Array.isArray(purchasers)
+    ? purchasers.filter(Boolean)
+    : [];
+
+  if (brandList.length === 0 && purchaserList.length === 0) return [];
+  if (brandList.length === 0) brandList = Object.keys(BRAND_PURCHASERS || {});
+  if (purchaserList.length === 0) {
+    const set = new Set();
+    brandList.forEach((b) => {
+      (BRAND_PURCHASERS[b] || []).forEach((p) => set.add(p));
+    });
+    purchaserList = Array.from(set);
+  }
+
+  const pairs = [];
+  brandList.forEach((tenant) => {
+    const allowed = BRAND_PURCHASERS[tenant];
+    if (!allowed) return;
+    purchaserList.forEach((purchaser) => {
+      if (allowed.indexOf(purchaser) !== -1) {
+        pairs.push({ tenant, purchaser });
+      }
+    });
+  });
+  return pairs;
+}
+
+const SCHEDULE_TIMEZONES = [
+  "UTC",
+  // US time zones (includes PST/PDT via America/Los_Angeles)
+  "America/Los_Angeles",
+  "America/Chicago",
+  "America/New_York",
+  "Europe/London",
+  // India Standard Time
+  "Asia/Kolkata",
+];
+
+const SCHEDULE_LOG_PATH = join(ROOT, "output", "logs", "schedule.log");
+
+function appendScheduleLog(entry) {
+  try {
+    const dir = dirname(SCHEDULE_LOG_PATH);
+    if (!existsSync(dir)) mkdirSync(dir, { recursive: true });
+    const line = JSON.stringify(
+      { timestamp: new Date().toISOString(), ...entry },
+    );
+    writeFileSync(SCHEDULE_LOG_PATH, line + "\n", {
+      encoding: "utf-8",
+      flag: "a",
+    });
+  } catch (_) {}
+}
 
 function getCurrentRunIdFromCheckpoint() {
   const path = existsSync(CHECKPOINT_JSON_PATH)
@@ -471,6 +573,85 @@ const MIME = {
   ".svg": "image/svg+xml",
   ".ico": "image/x-icon",
 };
+
+const ACTIVE_CRON_JOBS = new Map();
+
+function registerScheduleJob(schedule) {
+  if (!schedule || !schedule.id || !schedule.cron || !schedule.timezone) {
+    return;
+  }
+  if (!cron.validate(schedule.cron)) {
+    appendScheduleLog({
+      level: "warn",
+      message: "Invalid cron expression for schedule; skipping",
+      scheduleId: schedule.id,
+      cron: schedule.cron,
+    });
+    return;
+  }
+  if (!SCHEDULE_TIMEZONES.includes(schedule.timezone)) {
+    appendScheduleLog({
+      level: "warn",
+      message: "Invalid timezone for schedule; skipping",
+      scheduleId: schedule.id,
+      timezone: schedule.timezone,
+    });
+    return;
+  }
+  if (ACTIVE_CRON_JOBS.has(schedule.id)) {
+    try {
+      ACTIVE_CRON_JOBS.get(schedule.id).stop();
+    } catch (_) {}
+    ACTIVE_CRON_JOBS.delete(schedule.id);
+  }
+
+  const task = cron.schedule(
+    schedule.cron,
+    async () => {
+      const start = new Date().toISOString();
+      appendScheduleLog({
+        level: "info",
+        message: "Scheduled job started",
+        scheduleId: schedule.id,
+        start,
+      });
+      try {
+        const pairs = getPairsForSchedule(
+          schedule.brands || [],
+          schedule.purchasers || [],
+        );
+        const params = {};
+        if (pairs.length > 0) {
+          params.pairs = pairs;
+        }
+        const result = await runCase("PIPE", params, null, null);
+        appendScheduleLog({
+          level: "info",
+          message: "Scheduled job finished",
+          scheduleId: schedule.id,
+          exitCode: result.exitCode,
+        });
+      } catch (e) {
+        appendScheduleLog({
+          level: "error",
+          message: "Scheduled job failed",
+          scheduleId: schedule.id,
+          error: e && e.message ? e.message : String(e),
+        });
+      }
+    },
+    {
+      scheduled: true,
+      timezone: schedule.timezone,
+    },
+  );
+  ACTIVE_CRON_JOBS.set(schedule.id, task);
+}
+
+function bootstrapSchedules() {
+  const list = loadSchedules();
+  list.forEach((s) => registerScheduleJob(s));
+}
 createServer(async (req, res) => {
   const url = req.url?.split("?")[0] || "/";
   if (req.method === "GET" && url.startsWith("/assets/")) {
@@ -643,6 +824,180 @@ createServer(async (req, res) => {
     }
     return;
   }
+  if (req.method === "GET" && url === "/api/schedules") {
+    try {
+      const list = loadSchedules();
+      res.writeHead(200, { "Content-Type": "application/json" });
+      res.end(JSON.stringify({ schedules: list, timezones: SCHEDULE_TIMEZONES }));
+    } catch (e) {
+      res.writeHead(500, { "Content-Type": "application/json" });
+      res.end(JSON.stringify({ error: String(e.message) }));
+    }
+    return;
+  }
+  if (req.method === "POST" && url === "/api/schedules") {
+    let body = "";
+    for await (const chunk of req) body += chunk;
+    try {
+      const { brands, purchasers, cron: cronExpr, timezone } = JSON.parse(
+        body || "{}",
+      );
+      const brandList = Array.isArray(brands)
+        ? brands.filter((b) => typeof b === "string" && b.trim() !== "")
+        : [];
+      const purchaserList = Array.isArray(purchasers)
+        ? purchasers.filter((p) => typeof p === "string" && p.trim() !== "")
+        : [];
+      if (brandList.length === 0 && purchaserList.length === 0) {
+        res.writeHead(400, { "Content-Type": "application/json" });
+        res.end(
+          JSON.stringify({
+            error: "Please select at least one brand or purchaser.",
+          }),
+        );
+        return;
+      }
+      if (!cronExpr || typeof cronExpr !== "string" || !cron.validate(cronExpr)) {
+        res.writeHead(400, { "Content-Type": "application/json" });
+        res.end(
+          JSON.stringify({
+            error:
+              "Invalid cron expression. Use standard 5-field syntax like '0 * * * *'.",
+          }),
+        );
+        return;
+      }
+      if (
+        !timezone ||
+        typeof timezone !== "string" ||
+        !SCHEDULE_TIMEZONES.includes(timezone)
+      ) {
+        res.writeHead(400, { "Content-Type": "application/json" });
+        res.end(
+          JSON.stringify({
+            error: "Invalid timezone. Please choose a value from the dropdown.",
+          }),
+        );
+        return;
+      }
+      const list = loadSchedules();
+      const sched = {
+        id: scheduleId(),
+        createdAt: new Date().toISOString(),
+        brands: brandList,
+        purchasers: purchaserList,
+        cron: cronExpr,
+        timezone,
+      };
+      list.push(sched);
+      saveSchedules(list);
+      registerScheduleJob(sched);
+      res.writeHead(201, { "Content-Type": "application/json" });
+      res.end(JSON.stringify(sched));
+    } catch (e) {
+      res.writeHead(500, { "Content-Type": "application/json" });
+      res.end(JSON.stringify({ error: String(e.message) }));
+    }
+    return;
+  }
+  if (req.method === "PUT" && url.startsWith("/api/schedules/")) {
+    let body = "";
+    for await (const chunk of req) body += chunk;
+    try {
+      const id = decodeURIComponent(url.slice("/api/schedules/".length));
+      const { brands, purchasers, cron: cronExpr, timezone } = JSON.parse(
+        body || "{}",
+      );
+      const brandList = Array.isArray(brands)
+        ? brands.filter((b) => typeof b === "string" && b.trim() !== "")
+        : [];
+      const purchaserList = Array.isArray(purchasers)
+        ? purchasers.filter((p) => typeof p === "string" && p.trim() !== "")
+        : [];
+      if (brandList.length === 0 && purchaserList.length === 0) {
+        res.writeHead(400, { "Content-Type": "application/json" });
+        res.end(
+          JSON.stringify({
+            error: "Please select at least one brand or purchaser.",
+          }),
+        );
+        return;
+      }
+      if (!cronExpr || typeof cronExpr !== "string" || !cron.validate(cronExpr)) {
+        res.writeHead(400, { "Content-Type": "application/json" });
+        res.end(
+          JSON.stringify({
+            error:
+              "Invalid cron expression. Use standard 5-field syntax like '0 * * * *'.",
+          }),
+        );
+        return;
+      }
+      if (
+        !timezone ||
+        typeof timezone !== "string" ||
+        !SCHEDULE_TIMEZONES.includes(timezone)
+      ) {
+        res.writeHead(400, { "Content-Type": "application/json" });
+        res.end(
+          JSON.stringify({
+            error: "Invalid timezone. Please choose a value from the dropdown.",
+          }),
+        );
+        return;
+      }
+      const list = loadSchedules();
+      const idx = list.findIndex((s) => s.id === id);
+      if (idx === -1) {
+        res.writeHead(404, { "Content-Type": "application/json" });
+        res.end(JSON.stringify({ error: "Schedule not found" }));
+        return;
+      }
+      const updated = {
+        ...list[idx],
+        brands: brandList,
+        purchasers: purchaserList,
+        cron: cronExpr,
+        timezone,
+      };
+      list[idx] = updated;
+      saveSchedules(list);
+      registerScheduleJob(updated);
+      res.writeHead(200, { "Content-Type": "application/json" });
+      res.end(JSON.stringify(updated));
+    } catch (e) {
+      res.writeHead(500, { "Content-Type": "application/json" });
+      res.end(JSON.stringify({ error: String(e.message) }));
+    }
+    return;
+  }
+  if (req.method === "DELETE" && url.startsWith("/api/schedules/")) {
+    try {
+      const id = decodeURIComponent(url.slice("/api/schedules/".length));
+      const list = loadSchedules();
+      const idx = list.findIndex((s) => s.id === id);
+      if (idx === -1) {
+        res.writeHead(404, { "Content-Type": "application/json" });
+        res.end(JSON.stringify({ error: "Schedule not found" }));
+        return;
+      }
+      list.splice(idx, 1);
+      saveSchedules(list);
+      const job = ACTIVE_CRON_JOBS.get(id);
+      if (job) {
+        try {
+          job.stop();
+        } catch (_) {}
+        ACTIVE_CRON_JOBS.delete(id);
+      }
+      res.writeHead(204);
+      res.end();
+    } catch (e) {
+      res.writeHead(500, { "Content-Type": "application/json" });
+      res.end(JSON.stringify({ error: String(e.message) }));
+    }
+    return;
+  }
   if (req.method === "GET" && url === "/api/config") {
     try {
       res.writeHead(200, { "Content-Type": "application/json" });
@@ -805,4 +1160,5 @@ createServer(async (req, res) => {
 }).listen(PORT, () => {
   console.log(`IntelliExtract app: http://localhost:${PORT}/`);
   console.log("Open in browser, select Brand/Purchaser, then click Run.");
+  bootstrapSchedules();
 });

@@ -865,6 +865,156 @@
       .result.fail .result-table-wrap tr.status-row td {
         color: var(--fail);
       }
+      .modal-overlay {
+        position: fixed;
+        inset: 0;
+        background: rgba(15, 23, 42, 0.45);
+        display: none;
+        align-items: center;
+        justify-content: center;
+        z-index: 1000;
+      }
+      .modal-overlay.open {
+        display: flex;
+      }
+      .modal {
+        background: var(--surface);
+        border-radius: var(--radius);
+        box-shadow: var(--shadow-lg);
+        border: 0.85px solid var(--border);
+        max-width: 760px;
+        width: 760px;
+        padding: 1.062rem 1.275rem 0.85rem;
+        box-sizing: border-box;
+      }
+      .modal-header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        margin-bottom: 0.85rem;
+        padding-bottom: 0.51rem;
+        border-bottom: 0.85px solid var(--border-light);
+        background: var(--row-alt);
+      }
+      .modal-title {
+        font-size: 0.95rem;
+        font-weight: 600;
+        color: var(--text);
+      }
+      .modal-close-icon {
+        border: none;
+        background: transparent;
+        cursor: pointer;
+        font-size: 1rem;
+        color: var(--muted);
+        padding: 0.17rem;
+      }
+      .modal-close-icon:hover {
+        color: var(--fail);
+      }
+      .modal-body {
+        max-height: 460px;
+        overflow-y: auto;
+        font-size: 0.85rem;
+        color: var(--text-secondary);
+      }
+      .modal-footer {
+        margin-top: 0.85rem;
+        display: flex;
+        justify-content: flex-end;
+        gap: 0.51rem;
+        padding-top: 0.51rem;
+        border-top: 0.85px solid var(--border-light);
+        background: var(--row-alt);
+      }
+      .btn-secondary {
+        background: var(--surface);
+        color: var(--text-secondary);
+        border: 0.85px solid var(--border);
+        border-radius: var(--radius-sm);
+        padding: 0.46rem 0.85rem;
+        font-size: 0.85rem;
+        font-weight: 600;
+        cursor: pointer;
+        font-family: inherit;
+        box-shadow: var(--shadow-sm);
+      }
+      .btn-secondary:hover {
+        background: var(--row-alt);
+        color: var(--text);
+      }
+      .schedule-header-row {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        margin-bottom: 0.85rem;
+        gap: 0.85rem;
+      }
+      .schedule-empty {
+        color: var(--muted);
+      }
+      .schedule-list {
+        width: 100%;
+        border-collapse: collapse;
+        font-size: 0.8rem;
+      }
+      .schedule-list th,
+      .schedule-list td {
+        padding: 0.34rem 0.51rem;
+        border: 0.85px solid var(--border-light);
+        text-align: left;
+        vertical-align: top;
+      }
+      .schedule-form-grid {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+        gap: 0.68rem 0.85rem;
+        margin-top: 0.34rem;
+      }
+      .schedule-field {
+        display: flex;
+        flex-direction: column;
+        gap: 0.21rem;
+      }
+      .schedule-label {
+        font-size: 0.8rem;
+        font-weight: 600;
+        color: var(--text-secondary);
+      }
+      .schedule-hint {
+        font-size: 0.78rem;
+        color: var(--muted);
+      }
+      .schedule-select,
+      .schedule-input {
+        width: 100%;
+        height: 27.2px;
+        padding: 0.297rem 0.51rem;
+        border: 0.85px solid var(--border);
+        border-radius: var(--radius-sm);
+        background: var(--surface);
+        color: var(--text);
+        font-size: 0.85rem;
+        font-family: inherit;
+        box-sizing: border-box;
+        box-shadow:
+          0 0.85px 1.7px rgba(0, 0, 0, 0.06),
+          inset 0 0.85px 0.85px rgba(255, 255, 255, 0.8);
+      }
+      .schedule-select:focus,
+      .schedule-input:focus {
+        outline: none;
+        border-color: var(--primary);
+        box-shadow:
+          0 0 0 1.7px rgba(45, 157, 95, 0.2),
+          0 1.7px 3.4px rgba(0, 0, 0, 0.08),
+          inset 0 0.85px 0.85px rgba(255, 255, 255, 0.9);
+      }
+      .schedule-error {
+        margin-top: 0.34rem;
+        font-size: 0.78rem;
+        color: var(--fail);
+      }
     </style>
   </head>
   <body>
@@ -976,6 +1126,25 @@
         </table>
       </div>
     </main>
+
+    <div id="schedule-modal-overlay" class="modal-overlay" aria-hidden="true">
+      <div class="modal" role="dialog" aria-modal="true" aria-labelledby="schedule-modal-title">
+        <div class="modal-header">
+          <div class="modal-title" id="schedule-modal-title">
+            Schedule automatic sync &amp; extraction
+          </div>
+          <button
+            type="button"
+            id="schedule-modal-close-icon"
+            class="modal-close-icon"
+            aria-label="Close schedule dialog"
+          >
+            &#10005;
+          </button>
+        </div>
+        <div class="modal-body" id="schedule-modal-body"></div>
+      </div>
+    </div>
 
     <script type="module">
       (function () {
@@ -2131,6 +2300,22 @@
         addReportBtn("Summary Report", "html");
         addReportBtn("Extraction Results", "json");
       })();
+
+      (function initScheduleButton() {
+        var bar = document.getElementById("download-bar");
+        if (!bar) return;
+        var btns = document.getElementById("download-bar-btns");
+        var scheduleBtn = document.createElement("button");
+        scheduleBtn.type = "button";
+        scheduleBtn.textContent = "Schedule Extraction";
+        scheduleBtn.className = "download-report-btn download-report-html-btn";
+        scheduleBtn.style.marginLeft = "auto";
+        scheduleBtn.onclick = function () {
+          openScheduleModal();
+        };
+        bar.appendChild(scheduleBtn);
+        initScheduleModal();
+      })();
       document
         .querySelectorAll(".limit-sync, .limit-extract")
         .forEach(function (input) {
@@ -2319,6 +2504,377 @@
           });
         });
         updateFilterDropdownTrigger("purchaser");
+      }
+
+      function initScheduleModal() {
+        var overlay = document.getElementById("schedule-modal-overlay");
+        var body = document.getElementById("schedule-modal-body");
+        var closeIcon = document.getElementById("schedule-modal-close-icon");
+        if (!overlay || !body) return;
+        function close() {
+          overlay.classList.remove("open");
+          overlay.setAttribute("aria-hidden", "true");
+        }
+        if (closeIcon) closeIcon.onclick = close;
+        overlay.addEventListener("click", function (e) {
+          if (e.target === overlay) close();
+        });
+      }
+
+      function openScheduleModal() {
+        var overlay = document.getElementById("schedule-modal-overlay");
+        var body = document.getElementById("schedule-modal-body");
+        if (!overlay || !body) return;
+        overlay.classList.add("open");
+        overlay.setAttribute("aria-hidden", "false");
+        loadSchedulesIntoModal();
+      }
+
+      function renderScheduleListView(state) {
+        var body = document.getElementById("schedule-modal-body");
+        if (!body) return;
+        var schedules = state && Array.isArray(state.schedules) ? state.schedules : [];
+        var tz = state && Array.isArray(state.timezones) ? state.timezones : [];
+        var html =
+          '<div class="schedule-header-row"><div>Manage scheduled sync &amp; extraction jobs.</div><div style="display:flex;gap:0.51rem;flex-wrap:wrap;"><button type="button" id="schedule-history-btn" class="btn-secondary">History</button><button type="button" id="schedule-create-btn" class="download-report-btn download-report-html-btn">Create a Schedule</button></div></div>';
+        if (!schedules.length) {
+          html += '<div class="schedule-empty">No schedules created. Please create a schedule.</div>';
+        } else {
+          html += '<table class="schedule-list"><thead><tr><th>Brand filter</th><th>Purchaser filter</th><th>Time (cron)</th><th>Timezone</th><th>Created</th><th>Actions</th></tr></thead><tbody>';
+          schedules.forEach(function (s) {
+            var brands = (s.brands && s.brands.length ? s.brands.join(", ") : "All");
+            var purchasers = (s.purchasers && s.purchasers.length ? s.purchasers.join(", ") : "All");
+            html +=
+              "<tr data-sched-id='" +
+              escapeHtml(s.id || "") +
+              "'><td>" +
+              escapeHtml(brands) +
+              "</td><td>" +
+              escapeHtml(purchasers) +
+              "</td><td>" +
+              escapeHtml(s.cron) +
+              "</td><td>" +
+              escapeHtml(s.timezone) +
+              "</td><td>" +
+              escapeHtml(s.createdAt || "") +
+              "</td><td>" +
+              '<button type="button" class="btn-secondary" data-sched-edit>Edit</button> ' +
+              '<button type="button" class="btn-secondary" data-sched-delete>Delete</button>' +
+              "</td></tr>";
+          });
+          html += "</tbody></table>";
+        }
+        body.innerHTML = html;
+        var createBtn = document.getElementById("schedule-create-btn");
+        if (createBtn) {
+          createBtn.onclick = function () {
+            renderScheduleCreateForm(tz);
+          };
+        }
+        var historyBtn = document.getElementById("schedule-history-btn");
+        if (historyBtn) {
+          historyBtn.onclick = function () {
+            renderReportsHistoryView();
+          };
+        }
+        body.querySelectorAll("[data-sched-edit]").forEach(function (btn) {
+          btn.addEventListener("click", function () {
+            var tr = btn.closest("tr");
+            var id = tr && tr.getAttribute("data-sched-id");
+            if (!id) return;
+            var sched = schedules.find(function (s) {
+              return s.id === id;
+            });
+            if (!sched) return;
+            renderScheduleCreateForm(tz, sched);
+          });
+        });
+        body.querySelectorAll("[data-sched-delete]").forEach(function (btn) {
+          btn.addEventListener("click", function () {
+            var tr = btn.closest("tr");
+            var id = tr && tr.getAttribute("data-sched-id");
+            if (!id) return;
+            if (!window.confirm("Delete this schedule? This cannot be undone.")) return;
+            deleteSchedule(id);
+          });
+        });
+      }
+
+      function renderScheduleCreateForm(timezones, schedule) {
+        var body = document.getElementById("schedule-modal-body");
+        if (!body) return;
+        var brands = Object.keys(BRAND_PURCHASERS || {});
+        var purchasers = ALL_PURCHASERS || [];
+        var tz = Array.isArray(timezones) && timezones.length ? timezones : ["UTC"];
+        var brandOptions =
+          '<option value="">All brands</option>' +
+          brands
+            .map(function (b) {
+              return '<option value="' + escapeHtml(b) + '">' + escapeHtml(b) + "</option>";
+            })
+            .join("");
+        var purchaserOptions =
+          '<option value="">All purchasers</option>' +
+          purchasers
+            .map(function (p) {
+              return '<option value="' + escapeHtml(p) + '">' + escapeHtml(p) + "</option>";
+            })
+            .join("");
+        var cronOptions = "";
+        for (var h = 0; h < 24; h++) {
+          for (var m = 0; m < 60; m++) {
+            var displayHour = ((h + 11) % 12) + 1; // 0 -> 12, 13 -> 1
+            var ampm = h < 12 ? "AM" : "PM";
+            var minLabel = String(m).padStart(2, "0");
+            var label = displayHour + ":" + minLabel + " " + ampm;
+            var cronVal = String(m) + " " + String(h) + " * * *";
+            cronOptions +=
+              '<option value="' + cronVal + '">' + escapeHtml(label) + "</option>";
+          }
+        }
+        var tzOptions = tz
+          .map(function (z) {
+            return '<option value="' + escapeHtml(z) + '">' + escapeHtml(z) + "</option>";
+          })
+          .join("");
+        body.innerHTML =
+          '<div class="schedule-header-row"><div>' +
+          (schedule ? "Edit schedule." : "Create a new schedule.") +
+          "</div></div>" +
+          '<div class="schedule-form-grid">' +
+          '<div class="schedule-field"><label class="schedule-label" for="sched-brand">Brand (optional)</label><select id="sched-brand" class="schedule-select">' +
+          brandOptions +
+          '</select><div class="schedule-hint">Leave empty to include all brands.</div></div>' +
+          '<div class="schedule-field"><label class="schedule-label" for="sched-purchaser">Purchaser (optional)</label><select id="sched-purchaser" class="schedule-select">' +
+          purchaserOptions +
+          '</select><div class="schedule-hint">Leave empty to include all purchasers.</div></div>' +
+          '<div class="schedule-field"><label class="schedule-label" for="sched-cron">Run time (daily)</label><select id="sched-cron" class="schedule-select">' +
+          cronOptions +
+          '</select><div class="schedule-hint">Runs once per day at the selected time (every minute interval options).</div></div>' +
+          '<div class="schedule-field"><label class="schedule-label" for="sched-tz">Timezone</label><select id="sched-tz" class="schedule-select">' +
+          tzOptions +
+          '</select><div class="schedule-hint">All runs use this timezone for the cron schedule.</div></div>' +
+          "</div>" +
+          '<div id="schedule-error" class="schedule-error"></div>' +
+          '<div class="modal-footer" style="margin-top:0.85rem;"><button type="button" id="schedule-cancel-btn" class="btn-secondary">Cancel</button><button type="button" id="schedule-save-btn" class="download-report-btn download-report-html-btn">' +
+          (schedule ? "Update schedule" : "Save schedule") +
+          "</button></div>";
+        var cancelBtn = document.getElementById("schedule-cancel-btn");
+        if (cancelBtn) {
+          cancelBtn.onclick = function () {
+            loadSchedulesIntoModal();
+          };
+        }
+        var saveBtn = document.getElementById("schedule-save-btn");
+        if (saveBtn) {
+          saveBtn.onclick = function () {
+            submitScheduleForm(schedule);
+          };
+        }
+        if (schedule) {
+          var brandEl = document.getElementById("sched-brand");
+          var purchaserEl = document.getElementById("sched-purchaser");
+          var cronEl = document.getElementById("sched-cron");
+          var tzEl = document.getElementById("sched-tz");
+          if (brandEl && schedule.brands && schedule.brands.length) {
+            brandEl.value = schedule.brands[0];
+          }
+          if (purchaserEl && schedule.purchasers && schedule.purchasers.length) {
+            purchaserEl.value = schedule.purchasers[0];
+          }
+          if (cronEl && schedule.cron) {
+            cronEl.value = schedule.cron;
+          }
+          if (tzEl && schedule.timezone) {
+            tzEl.value = schedule.timezone;
+          }
+        }
+      }
+
+      function loadSchedulesIntoModal() {
+        fetch("/api/schedules")
+          .then(function (r) {
+            if (!r.ok) throw new Error("Could not load schedules");
+            return r.json();
+          })
+          .then(function (data) {
+            renderScheduleListView({
+              schedules: data.schedules || [],
+              timezones: data.timezones || [],
+            });
+          })
+          .catch(function () {
+            renderScheduleListView({ schedules: [], timezones: ["UTC"] });
+          });
+      }
+
+      function renderReportsHistoryView() {
+        var body = document.getElementById("schedule-modal-body");
+        if (!body) return;
+        fetch("/api/reports")
+          .then(function (r) {
+            if (!r.ok) throw new Error("Could not load reports");
+            return r.json();
+          })
+          .then(function (list) {
+            var html =
+              '<div class="schedule-header-row"><div>Reports history</div><button type="button" id="history-back-btn" class="btn-secondary">Back to Schedules</button></div>';
+            html +=
+              '<div style="margin-bottom:0.85rem;display:flex;flex-wrap:wrap;gap:0.51rem;">' +
+              '<button type="button" id="history-latest-summary" class="download-report-btn download-report-html-btn">Latest summary (HTML)</button>' +
+              '<button type="button" id="history-latest-summary-json" class="download-report-btn download-report-json-btn">Latest summary (JSON)</button>' +
+              '<button type="button" id="history-extractions-zip" class="download-report-btn download-report-json-btn">Latest extractions ZIP</button>' +
+              "</div>";
+            var items = [];
+            (list.html || []).forEach(function (r) {
+              items.push({
+                name: r.name,
+                mtime: r.mtime || 0,
+                type: "Summary (HTML)",
+              });
+            });
+            (list.json || []).forEach(function (r) {
+              items.push({
+                name: r.name,
+                mtime: r.mtime || 0,
+                type: "Summary (JSON)",
+              });
+            });
+            items.sort(function (a, b) {
+              return (b.mtime || 0) - (a.mtime || 0);
+            });
+            if (!items.length) {
+              html += '<div class="schedule-empty">No reports available yet. Run or schedule an extraction to generate reports.</div>';
+            } else {
+              html += '<table class="schedule-list"><thead><tr><th>Name</th><th>Type</th><th>Modified</th></tr></thead><tbody>';
+              items.forEach(function (it) {
+                var dateLabel = it.mtime
+                  ? new Date(it.mtime).toLocaleString()
+                  : "";
+                html +=
+                  "<tr><td>" +
+                  escapeHtml(it.name) +
+                  "</td><td>" +
+                  escapeHtml(it.type) +
+                  "</td><td>" +
+                  escapeHtml(dateLabel) +
+                  "</td></tr>";
+              });
+              html += "</tbody></table>";
+            }
+            body.innerHTML = html;
+            var backBtn = document.getElementById("history-back-btn");
+            if (backBtn) {
+              backBtn.onclick = function () {
+                loadSchedulesIntoModal();
+              };
+            }
+            var latestSummaryBtn = document.getElementById(
+              "history-latest-summary",
+            );
+            if (latestSummaryBtn) {
+              latestSummaryBtn.onclick = function () {
+                downloadLatestReport(latestSummaryBtn, "html");
+              };
+            }
+            var latestSummaryJsonBtn = document.getElementById(
+              "history-latest-summary-json",
+            );
+            if (latestSummaryJsonBtn) {
+              latestSummaryJsonBtn.onclick = function () {
+                downloadLatestReport(latestSummaryJsonBtn, "json");
+              };
+            }
+            var extractionsZipBtn = document.getElementById(
+              "history-extractions-zip",
+            );
+            if (extractionsZipBtn) {
+              extractionsZipBtn.onclick = function () {
+                downloadExtractionsZip(extractionsZipBtn);
+              };
+            }
+          })
+          .catch(function () {
+            body.innerHTML =
+              '<div class="schedule-header-row"><div>Reports history</div><button type="button" id="history-back-btn" class="btn-secondary">Back to Schedules</button></div><div class="schedule-empty">Could not load reports.</div>';
+            var backBtn = document.getElementById("history-back-btn");
+            if (backBtn) {
+              backBtn.onclick = function () {
+                loadSchedulesIntoModal();
+              };
+            }
+          });
+      }
+
+      function deleteSchedule(id) {
+        fetch("/api/schedules/" + encodeURIComponent(id), {
+          method: "DELETE",
+        })
+          .then(function (r) {
+            if (!r.ok) {
+              throw new Error("Failed to delete schedule");
+            }
+            loadSchedulesIntoModal();
+          })
+          .catch(function () {
+            // Best effort; keep current view if delete fails.
+          });
+      }
+
+      function submitScheduleForm(schedule) {
+        var brandEl = document.getElementById("sched-brand");
+        var purchaserEl = document.getElementById("sched-purchaser");
+        var cronEl = document.getElementById("sched-cron");
+        var tzEl = document.getElementById("sched-tz");
+        var errorEl = document.getElementById("schedule-error");
+        if (!brandEl || !purchaserEl || !cronEl || !tzEl || !errorEl) return;
+        var brand = (brandEl.value || "").trim();
+        var purchaser = (purchaserEl.value || "").trim();
+        var cron = (cronEl.value || "").trim();
+        var timezone = (tzEl.value || "").trim();
+        errorEl.textContent = "";
+        if (!brand && !purchaser) {
+          errorEl.textContent = "Please select at least one brand or purchaser.";
+          return;
+        }
+        if (!cron) {
+          errorEl.textContent = "Run time is required.";
+          return;
+        }
+        if (!timezone) {
+          errorEl.textContent = "Timezone is required.";
+          return;
+        }
+        var url = "/api/schedules";
+        var method = "POST";
+        if (schedule && schedule.id) {
+          url = "/api/schedules/" + encodeURIComponent(schedule.id);
+          method = "PUT";
+        }
+        fetch(url, {
+          method: method,
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            brands: brand ? [brand] : [],
+            purchasers: purchaser ? [purchaser] : [],
+            cron: cron,
+            timezone: timezone,
+          }),
+        })
+          .then(function (r) {
+            if (!r.ok) {
+              return r.json().then(function (err) {
+                throw new Error(err && err.error ? err.error : "Failed to save schedule");
+              });
+            }
+            return r.json();
+          })
+          .then(function () {
+            loadSchedulesIntoModal();
+          })
+          .catch(function (e) {
+            errorEl.textContent = e && e.message ? e.message : "Failed to save schedule.";
+          });
       }
       function clearResumeStateFromAllRows() {
         var tbody = document.getElementById("rows");
