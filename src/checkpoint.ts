@@ -261,6 +261,26 @@ export function upsertCheckpoint(
   saveStore(db);
 }
 
+/** Batch upsert: apply all records in memory then save once. Use for many skipped/completed records to avoid N file writes. */
+export function upsertCheckpoints(
+  db: CheckpointDb,
+  records: CheckpointRecord[],
+): void {
+  if (records.length === 0) return;
+  for (const record of records) {
+    const row = recordToRow(record);
+    const idx = db._data.checkpoints.findIndex(
+      (c) => c.file_path === record.filePath && c.run_id === record.runId,
+    );
+    if (idx >= 0) {
+      db._data.checkpoints[idx] = row;
+    } else {
+      db._data.checkpoints.push(row);
+    }
+  }
+  saveStore(db);
+}
+
 export function isCompleted(
   db: CheckpointDb,
   runId: string,

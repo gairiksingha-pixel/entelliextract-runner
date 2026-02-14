@@ -150,6 +150,8 @@ export async function syncBucket(
     }) => void;
     /** When set, called before downloading a file (for resume: persist in-progress path so partial can be removed). */
     onStartDownload?: (destPath: string, manifestKey: string) => void;
+    /** When set, paths in this set are treated as already extracted; skip file read/SHA check and count as skipped. */
+    alreadyExtractedPaths?: Set<string>;
   },
 ): Promise<{
   brand: string;
@@ -191,6 +193,17 @@ export async function syncBucket(
       ? join(brandDir, purchaser, keyAfterPrefix)
       : join(brandDir, key);
     const mk = manifestKey(brand, key);
+
+    if (options.alreadyExtractedPaths?.has(destPath)) {
+      skipped++;
+      options.onSyncSkipProgress?.(skipped, skipped + synced);
+      if (options.onFileSynced) {
+        const relativePath = relative(brandDir, destPath).replace(/\\/g, "/");
+        options.onFileSynced({ filePath: destPath, relativePath, brand });
+      }
+      reportProgress();
+      continue;
+    }
 
     const shouldSkip = await skipIfUnchanged(destPath, mk, options.manifest);
     if (shouldSkip) {
@@ -251,6 +264,8 @@ export async function syncAllBuckets(
       brand: string;
     }) => void;
     onStartDownload?: (destPath: string, manifestKey: string) => void;
+    /** When set, paths in this set are already extracted; sync skips file read/SHA for them. */
+    alreadyExtractedPaths?: Set<string>;
   },
 ): Promise<SyncResult[]> {
   const client = getS3Client(config.s3.region);
@@ -280,6 +295,7 @@ export async function syncAllBuckets(
       onSyncSkipProgress: overrides?.onSyncSkipProgress,
       onFileSynced: overrides?.onFileSynced,
       onStartDownload: overrides?.onStartDownload,
+      alreadyExtractedPaths: overrides?.alreadyExtractedPaths,
     });
     results.push(result);
   }

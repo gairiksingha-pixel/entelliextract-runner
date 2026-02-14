@@ -13,11 +13,10 @@ import {
 } from "./load-engine.js";
 import {
   openCheckpointDb,
-  getOrCreateRunId,
   getCurrentRunId,
   startRun,
   getCompletedPaths,
-  upsertCheckpoint,
+  upsertCheckpoints,
   getRecordsForRun,
   closeCheckpointDb,
 } from "./checkpoint.js";
@@ -207,6 +206,13 @@ export async function runSyncExtractPipeline(
   let syncResults: SyncResult[] = [];
   let extractionQueued = 0;
   let extractionDone = 0;
+  const skippedRecords: Array<{
+    filePath: string;
+    relativePath: string;
+    brand: string;
+    status: "skipped";
+    runId: string;
+  }> = [];
 
   const onFileSynced = (job: FileJob) => {
     clearResumeState(config);
@@ -215,8 +221,7 @@ export async function runSyncExtractPipeline(
     if (completed.has(job.filePath)) {
       extractionDone++;
       options.onExtractionProgress?.(extractionDone, extractionQueued);
-      // Persistent skip: record it for the current run
-      upsertCheckpoint(db, {
+      skippedRecords.push({
         filePath: job.filePath,
         relativePath: job.relativePath,
         brand: job.brand,
@@ -251,7 +256,12 @@ export async function runSyncExtractPipeline(
         syncInProgressManifestKey: manifestKey,
       });
     },
+    alreadyExtractedPaths: completed.size > 0 ? completed : undefined,
   });
+
+  if (skippedRecords.length > 0) {
+    upsertCheckpoints(db, skippedRecords);
+  }
 
   await extractionQueue.onIdle();
   const finishedAt = new Date();

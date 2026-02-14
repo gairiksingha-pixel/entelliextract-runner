@@ -989,6 +989,24 @@
         text-align: left;
         vertical-align: top;
       }
+      .schedule-outcome-skipped {
+        display: inline-block;
+        padding: 0.17rem 0.4rem;
+        border-radius: 0.25rem;
+        font-weight: 600;
+        font-size: 0.75rem;
+        background: #fef3c7;
+        color: #92400e;
+      }
+      .schedule-outcome-executed {
+        display: inline-block;
+        padding: 0.17rem 0.4rem;
+        border-radius: 0.25rem;
+        font-weight: 600;
+        font-size: 0.75rem;
+        background: #d1fae5;
+        color: #065f46;
+      }
       .schedule-form-grid {
         display: grid;
         grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
@@ -1685,6 +1703,7 @@
       function resetCase(resultDiv, options) {
         if (!resultDiv) return;
         var row = resultDiv.closest("tr");
+        var caseId = row ? row.getAttribute("data-case-id") : null;
         // If this row has an active controller (in-flight run), abort it so reset truly stops execution.
         if (
           row &&
@@ -1695,6 +1714,17 @@
           try {
             row._activeController.abort();
           } catch (_) {}
+        }
+        // Clear server and localStorage so reload shows clean state (reset = abort, user must re-run).
+        if (caseId) {
+          try {
+            localStorage.removeItem("intelliextract-run-state-" + caseId);
+          } catch (_) {}
+          fetch("/api/run-state/clear", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ caseId: caseId }),
+          }).catch(function () {});
         }
         var clearLimits = !options || options.clearLimits !== false;
         resultDiv.innerHTML =
@@ -1713,11 +1743,26 @@
           if (row._resumeSyncLimit !== undefined) delete row._resumeSyncLimit;
           if (row._resumeExtractLimit !== undefined)
             delete row._resumeExtractLimit;
+          if (row._resumeSync !== undefined) delete row._resumeSync;
+          if (row._resumeExtract !== undefined) delete row._resumeExtract;
           var runBtn = row.querySelector("button.run");
           if (runBtn) {
             runBtn.disabled = false;
             runBtn.title = runBtn.textContent || "";
           }
+          var resetBtn = row.querySelector(
+            "button.reset-case:not(.reset-during-resume)",
+          );
+          if (resetBtn) {
+            resetBtn.textContent = "Reset";
+            resetBtn.classList.remove("stop-btn", "resume-btn");
+            resetBtn.onclick = function () {
+              resetCase(resultDiv);
+            };
+          }
+          var resetDuringResumeBtn = row.querySelector(".reset-during-resume");
+          if (resetDuringResumeBtn)
+            resetDuringResumeBtn.classList.remove("show-during-resume");
           setOtherRowsActive();
         }
       }
@@ -2865,7 +2910,7 @@
           state && Array.isArray(state.schedules) ? state.schedules : [];
         var tz = state && Array.isArray(state.timezones) ? state.timezones : [];
         var html =
-          '<div class="schedule-header-row"><div>Manage scheduled sync &amp; extraction jobs.</div><div style="display:flex;gap:0.51rem;flex-wrap:wrap;"><button type="button" id="schedule-history-btn" class="btn-secondary">History</button><button type="button" id="schedule-create-btn" class="download-report-btn download-report-schedule-btn">Create a Schedule</button></div></div><div style="flex:1;display:flex;flex-direction:column;min-height:0;">';
+          '<div class="schedule-header-row"><div>Manage scheduled sync &amp; extraction jobs.</div><div style="display:flex;gap:0.51rem;flex-wrap:wrap;"><button type="button" id="schedule-history-btn" class="btn-secondary">History</button><button type="button" id="schedule-reports-btn" class="btn-secondary">Reports</button><button type="button" id="schedule-create-btn" class="download-report-btn download-report-schedule-btn">Create a Schedule</button></div></div><div style="flex:1;display:flex;flex-direction:column;min-height:0;">';
         if (!schedules.length) {
           html +=
             '<div class="schedule-empty">No schedules created. Please create a schedule.</div>';
@@ -2910,6 +2955,12 @@
         var historyBtn = document.getElementById("schedule-history-btn");
         if (historyBtn) {
           historyBtn.onclick = function () {
+            renderScheduleRunHistoryView();
+          };
+        }
+        var reportsBtn = document.getElementById("schedule-reports-btn");
+        if (reportsBtn) {
+          reportsBtn.onclick = function () {
             renderReportsHistoryView();
           };
         }
@@ -3080,7 +3131,7 @@
           '<div id="schedule-error" class="schedule-error"></div>' +
           "</div>" +
           '<div style="background:#fff3e0;border:1px solid #ffe0b2;border-radius:6px;padding:0.5rem 0.75rem;margin-top:0.5rem;font-size:0.8rem;color:#e65100;line-height:1.4;">' +
-          "<strong>⚠ Note:</strong> Make sure no Sync &amp; Extract or any other process is running at the scheduled time. If any manual process is active when the cron triggers, the scheduled run will be <strong>skipped</strong>." +
+          "<strong>⚠ Note:</strong> Make sure no Sync &amp; Extract or any other process is running at the scheduled time. If any manual process is active, or any process is in <strong>paused (Resume)</strong> mode, when the cron triggers, the scheduled run will be <strong>skipped</strong>." +
           "</div>" +
           '<div class="modal-footer" style="margin-top:0.85rem;"><button type="button" id="schedule-cancel-btn" class="btn-secondary">Cancel</button><button type="button" id="schedule-save-btn" class="download-report-btn download-report-schedule-btn">' +
           (schedule ? "Update schedule" : "Save schedule") +
@@ -3206,6 +3257,75 @@
           })
           .catch(function () {
             renderScheduleListView({ schedules: [], timezones: ["UTC"] });
+          });
+      }
+
+      function renderScheduleRunHistoryView() {
+        var body = document.getElementById("schedule-modal-body");
+        if (!body) return;
+        body.innerHTML =
+          '<div class="schedule-header-row"><div>Schedule run history</div><button type="button" id="schedule-log-back-btn" class="btn-secondary">Back to Schedules</button></div><div class="schedule-empty">Loading…</div>';
+        var backBtn = document.getElementById("schedule-log-back-btn");
+        if (backBtn) {
+          backBtn.onclick = function () {
+            loadSchedulesIntoModal();
+          };
+        }
+        fetch("/api/schedule-log")
+          .then(function (r) {
+            if (!r.ok) throw new Error("Could not load schedule log");
+            return r.json();
+          })
+          .then(function (data) {
+            var entries = data.entries || [];
+            var html =
+              '<div class="schedule-header-row"><div>Schedule run history</div><button type="button" id="schedule-log-back-btn" class="btn-secondary">Back to Schedules</button></div><div style="flex:1;overflow-y:auto;">';
+            if (!entries.length) {
+              html +=
+                '<div class="schedule-empty">No schedule run log yet. Skipped and executed runs will appear here.</div>';
+            } else {
+              html +=
+                '<table class="schedule-list"><thead><tr><th>Time</th><th>Schedule ID</th><th>Outcome</th><th>Message</th></tr></thead><tbody>';
+              entries.forEach(function (e) {
+                var time = e.timestamp ? new Date(e.timestamp).toLocaleString() : "";
+                var schedId = e.scheduleId != null ? String(e.scheduleId).slice(0, 20) : "";
+                var outcome = (e.outcome || "executed").toLowerCase();
+                var outcomeLabel = outcome === "skipped" ? "Skipped" : "Executed";
+                var outcomeClass = outcome === "skipped" ? "schedule-outcome-skipped" : "schedule-outcome-executed";
+                var msg = (e.message || "") + (e.error ? " — " + e.error : "") + (e.exitCode != null ? " (exit " + e.exitCode + ")" : "");
+                html +=
+                  "<tr><td>" +
+                  escapeHtml(time) +
+                  "</td><td>" +
+                  escapeHtml(schedId) +
+                  "</td><td><span class=\"" +
+                  outcomeClass +
+                  "\">" +
+                  escapeHtml(outcomeLabel) +
+                  "</span></td><td>" +
+                  escapeHtml(msg) +
+                  "</td></tr>";
+              });
+              html += "</tbody></table>";
+            }
+            html += "</div>";
+            body.innerHTML = html;
+            backBtn = document.getElementById("schedule-log-back-btn");
+            if (backBtn) {
+              backBtn.onclick = function () {
+                loadSchedulesIntoModal();
+              };
+            }
+          })
+          .catch(function () {
+            body.innerHTML =
+              '<div class="schedule-header-row"><div>Schedule run history</div><button type="button" id="schedule-log-back-btn" class="btn-secondary">Back to Schedules</button></div><div class="schedule-empty">Could not load schedule log.</div>';
+            backBtn = document.getElementById("schedule-log-back-btn");
+            if (backBtn) {
+              backBtn.onclick = function () {
+                loadSchedulesIntoModal();
+              };
+            }
           });
       }
 

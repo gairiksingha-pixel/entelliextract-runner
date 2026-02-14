@@ -195,6 +195,34 @@ function appendScheduleLog(entry) {
   } catch (_) {}
 }
 
+const SCHEDULE_LOG_MAX_ENTRIES = 500;
+
+function readScheduleLogEntries() {
+  if (!existsSync(SCHEDULE_LOG_PATH)) return [];
+  try {
+    const raw = readFileSync(SCHEDULE_LOG_PATH, "utf-8");
+    const lines = raw.split("\n").filter((s) => s.trim());
+    const entries = [];
+    for (const line of lines) {
+      try {
+        const entry = JSON.parse(line);
+        if (entry && (entry.scheduleId || entry.message)) {
+          if (entry.outcome === undefined) {
+            entry.outcome =
+              entry.message && String(entry.message).toLowerCase().includes("skipped")
+                ? "skipped"
+                : "executed";
+          }
+          entries.push(entry);
+        }
+      } catch (_) {}
+    }
+    return entries.slice(-SCHEDULE_LOG_MAX_ENTRIES).reverse();
+  } catch (_) {
+    return [];
+  }
+}
+
 function getCurrentRunIdFromCheckpoint() {
   const path = existsSync(CHECKPOINT_JSON_PATH)
     ? CHECKPOINT_JSON_PATH
@@ -632,6 +660,7 @@ function registerScheduleJob(schedule) {
   }
   if (!cron.validate(schedule.cron)) {
     appendScheduleLog({
+      outcome: "skipped",
       level: "warn",
       message: "Invalid cron expression for schedule; skipping",
       scheduleId: schedule.id,
@@ -641,6 +670,7 @@ function registerScheduleJob(schedule) {
   }
   if (!SCHEDULE_TIMEZONES.includes(schedule.timezone)) {
     appendScheduleLog({
+      outcome: "skipped",
       level: "warn",
       message: "Invalid timezone for schedule; skipping",
       scheduleId: schedule.id,
@@ -667,6 +697,7 @@ function registerScheduleJob(schedule) {
       );
       if (manualRunning) {
         appendScheduleLog({
+          outcome: "skipped",
           level: "warn",
           message:
             "Scheduled job skipped — a manual process (" +
@@ -679,7 +710,28 @@ function registerScheduleJob(schedule) {
         return;
       }
 
+      // Skip if any process is in paused (resumable) mode
+      const pausedCase = Array.from(RESUME_CAPABLE_CASES).find((cid) => {
+        const state = getRunState(cid);
+        return state && state.status === "stopped";
+      });
+      if (pausedCase) {
+        appendScheduleLog({
+          outcome: "skipped",
+          level: "warn",
+          message:
+            "Scheduled job skipped — a process (" +
+            pausedCase +
+            ") is in paused (resume) mode",
+          scheduleId: schedule.id,
+          skippedAt: start,
+          pausedCase,
+        });
+        return;
+      }
+
       appendScheduleLog({
+        outcome: "executed",
         level: "info",
         message: "Scheduled job started",
         scheduleId: schedule.id,
@@ -739,6 +791,7 @@ function registerScheduleJob(schedule) {
         CHILD_PROCESSES.delete(activeRunKey);
 
         appendScheduleLog({
+          outcome: "executed",
           level: "info",
           message: "Scheduled job finished",
           scheduleId: schedule.id,
@@ -750,6 +803,7 @@ function registerScheduleJob(schedule) {
         CHILD_PROCESSES.delete(activeRunKey);
 
         appendScheduleLog({
+          outcome: "executed",
           level: "error",
           message: "Scheduled job failed",
           scheduleId: schedule.id,
@@ -1093,6 +1147,33 @@ createServer(async (req, res) => {
         res.writeHead(200, { "Content-Type": "application/json" });
         res.end(JSON.stringify(pipelineStatus));
       }
+    } catch (e) {
+      res.writeHead(500, { "Content-Type": "application/json" });
+      res.end(JSON.stringify({ error: String(e.message) }));
+    }
+    return;
+  }
+  if (req.method === "POST" && url === "/api/run-state/clear") {
+    let body = "";
+    for await (const chunk of req) body += chunk;
+    try {
+      const { caseId } = JSON.parse(body || "{}");
+      if (caseId && typeof caseId === "string") {
+        clearRunState(caseId);
+      }
+      res.writeHead(200, { "Content-Type": "application/json" });
+      res.end(JSON.stringify({ ok: true }));
+    } catch (e) {
+      res.writeHead(500, { "Content-Type": "application/json" });
+      res.end(JSON.stringify({ error: String(e.message) }));
+    }
+    return;
+  }
+  if (req.method === "GET" && url === "/api/schedule-log") {
+    try {
+      const entries = readScheduleLogEntries();
+      res.writeHead(200, { "Content-Type": "application/json" });
+      res.end(JSON.stringify({ entries }));
     } catch (e) {
       res.writeHead(500, { "Content-Type": "application/json" });
       res.end(JSON.stringify({ error: String(e.message) }));

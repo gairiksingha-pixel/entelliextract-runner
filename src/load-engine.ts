@@ -25,6 +25,7 @@ import {
   getCompletedPaths,
   createRunIdOnly,
   upsertCheckpoint,
+  upsertCheckpoints,
   getRecordsForRun,
   closeCheckpointDb,
 } from "./checkpoint.js";
@@ -324,18 +325,18 @@ export async function runExtraction(
   const jobs = discoverStagingFiles(config.s3.stagingDir, buckets);
 
   // Record files already completed as 'skipped' for this specific run so metrics
-  // correctly identify them as such (not Success, not Failed).
-  const skippedCount = jobs.filter((j) => completed.has(j.filePath)).length;
-  for (const job of jobs) {
-    if (completed.has(job.filePath)) {
-      upsertCheckpoint(db, {
-        filePath: job.filePath,
-        relativePath: job.relativePath,
-        brand: job.brand,
-        status: "skipped",
-        runId,
-      });
-    }
+  // correctly identify them as such (not Success, not Failed). Batch upsert to avoid N file writes.
+  const skippedRecords = jobs
+    .filter((j) => completed.has(j.filePath))
+    .map((job) => ({
+      filePath: job.filePath,
+      relativePath: job.relativePath,
+      brand: job.brand,
+      status: "skipped" as const,
+      runId,
+    }));
+  if (skippedRecords.length > 0) {
+    upsertCheckpoints(db, skippedRecords);
   }
 
   let toProcess = jobs.filter((j) => !completed.has(j.filePath));
