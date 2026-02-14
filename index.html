@@ -1344,8 +1344,8 @@
         caseId,
         resumeSkipSyncProgress,
         resumeSkipExtractProgress,
+        logMessage,
       ) {
-        div.style.display = "block";
         var resultClass = "running";
         if (data) resultClass = pass ? "pass" : "fail";
         div.className = "result " + resultClass;
@@ -1353,6 +1353,18 @@
         if (!data) {
           var label;
           var extra = "";
+          if (logMessage) {
+            label = logMessage;
+            // If there's a specific log message, we don't need the default loading dots or progress bars
+            // unless they are explicitly part of the log message.
+            // For now, let's assume logMessage replaces the primary label.
+            // We might want to keep progress bars if logMessage is just an additional detail.
+            // For this change, I'll make logMessage override the main label.
+            var showDots = false; // Override default showDots behavior if logMessage is present
+          } else {
+            var showDots = true; // Default behavior if no logMessage
+          }
+
           var hasResumeSkipSync =
             resumeSkipSyncProgress != null &&
             (resumeSkipSyncProgress.skipped != null ||
@@ -1444,51 +1456,61 @@
                   ? '<div class="sync-progress-bar"><div class="sync-progress-fill sync-progress-indeterminate" style="width:40%"></div></div>'
                   : '<div class="sync-progress-bar"><div class="sync-progress-fill sync-progress-indeterminate" style="width:40%"></div></div>');
           }
-          var showDots = true;
-          if (
-            hasResumeSkipSync ||
-            hasResumeSkipExtract ||
-            hasSync ||
-            hasExtraction
-          ) {
-            showDots = false;
-            var showSyncSkipLabel = hasResumeSkipSync && caseId !== "PIPE";
-            label = showSyncSkipLabel
-              ? "Skipping synced files…"
-              : hasResumeSkipExtract && !hasSync && !hasExtraction
-                ? "Skipping extracted files…"
-                : hasResumeSkipExtract && (hasSync || hasExtraction)
-                  ? "Skipped extract, syncing/extracting…"
-                  : hasSync && hasExtraction
-                    ? "Sync & extract…"
-                    : hasSync
-                      ? "Syncing…"
-                      : "Extracting…";
-          } else {
-            var pctVal =
-              progress && progress.percent != null
-                ? Number(progress.percent)
-                : null;
-            var doneVal =
-              progress && progress.done != null ? Number(progress.done) : null;
-            var totalVal =
-              progress && progress.total != null
-                ? Number(progress.total)
-                : null;
+          // Only set label if not already set by logMessage
+          if (!logMessage) {
             if (
-              pctVal != null &&
-              totalVal != null &&
-              totalVal > 0 &&
-              doneVal != null
+              hasResumeSkipSync ||
+              hasResumeSkipExtract ||
+              hasSync ||
+              hasExtraction
             ) {
-              label =
-                "Running… " + pctVal + "% (" + doneVal + " / " + totalVal + ")";
               showDots = false;
-            } else if (pctVal != null) {
-              label = "Running… " + pctVal + "%";
-              showDots = false;
+              var showSyncSkipLabel = hasResumeSkipSync && caseId !== "PIPE";
+              label = showSyncSkipLabel
+                ? "Skipping synced files…"
+                : hasResumeSkipExtract && !hasSync && !hasExtraction
+                  ? "Skipping extracted files…"
+                  : hasResumeSkipExtract && (hasSync || hasExtraction)
+                    ? "Skipped extract, syncing/extracting…"
+                    : hasSync && hasExtraction
+                      ? "Sync & extract…"
+                      : hasSync
+                        ? "Syncing…"
+                        : "Extracting…";
             } else {
-              label = "Running…";
+              var pctVal =
+                progress && progress.percent != null
+                  ? Number(progress.percent)
+                  : null;
+              var doneVal =
+                progress && progress.done != null
+                  ? Number(progress.done)
+                  : null;
+              var totalVal =
+                progress && progress.total != null
+                  ? Number(progress.total)
+                  : null;
+              if (
+                pctVal != null &&
+                totalVal != null &&
+                totalVal > 0 &&
+                doneVal != null
+              ) {
+                label =
+                  "Running… " +
+                  pctVal +
+                  "% (" +
+                  doneVal +
+                  " / " +
+                  totalVal +
+                  ")";
+                showDots = false;
+              } else if (pctVal != null) {
+                label = "Running… " + pctVal + "%";
+                showDots = false;
+              } else {
+                label = "Running…";
+              }
             }
           }
           div.innerHTML =
@@ -2022,6 +2044,7 @@
           caseId,
           null,
           null,
+          null, // logMessage
         );
         var params;
         if (
@@ -2083,6 +2106,9 @@
               if (row._resumeExtract != null)
                 body.lastExtractDone = row._resumeExtract.done;
             }
+            if (row && row._resumeRunId) {
+              body.runId = row._resumeRunId;
+            }
           }
           if (tp.pairs && tp.pairs.length > 0) {
             body.pairs = tp.pairs;
@@ -2116,6 +2142,7 @@
               caseId,
               null,
               null,
+              null, // logMessage
             );
             return;
           }
@@ -2127,6 +2154,8 @@
           var lastExtractionProgress = null;
           var lastResumeSkipSync = null;
           var lastResumeSkipExtract = null;
+          var lastLogMessage = null;
+          row._lastLogMessage = null;
           while (true) {
             var chunk = await reader.read();
             if (chunk.done) break;
@@ -2149,6 +2178,22 @@
                     caseId,
                     lastResumeSkipSync,
                     lastResumeSkipExtract,
+                    lastLogMessage,
+                  );
+                } else if (msg.type === "log") {
+                  lastLogMessage = msg.message;
+                  if (row) row._lastLogMessage = msg.message;
+                  showResult(
+                    resultDiv,
+                    null,
+                    false,
+                    null,
+                    lastSyncProgress,
+                    lastExtractionProgress,
+                    caseId,
+                    lastResumeSkipSync,
+                    lastResumeSkipExtract,
+                    lastLogMessage,
                   );
                 } else if (msg.type === "resume_skip_sync") {
                   lastResumeSkipSync = {
@@ -2165,6 +2210,7 @@
                     caseId,
                     lastResumeSkipSync,
                     lastResumeSkipExtract,
+                    lastLogMessage,
                   );
                 } else if (msg.type === "resume_skip") {
                   lastResumeSkipExtract = {
@@ -2208,6 +2254,8 @@
                     lastResumeSkipSync,
                     lastResumeSkipExtract,
                   );
+                } else if (msg.type === "run_id") {
+                  if (row) row._currentRunId = msg.runId;
                 } else if (msg.type === "result") {
                   data = msg;
                 } else if (msg.error) {
@@ -2268,6 +2316,7 @@
                 row._aborted = true;
                 row._resumeSync = lastSyncProgress;
                 row._resumeExtract = lastExtractionProgress;
+                if (row._currentRunId) row._resumeRunId = row._currentRunId;
                 var limitInputs = row.querySelectorAll(
                   ".limit-sync, .limit-extract",
                 );
@@ -2328,7 +2377,9 @@
           if (row) row._activeController = null;
           if (row && row._aborted) {
             row._aborted = false;
-            btn.disabled = false;
+            btn.disabled = true;
+            btn.title =
+              "Please reset the download/extraction to start a new download/extraction";
             setOtherRowsInactive(row, RESUME_OTHER_DISABLED_TITLE);
           } else {
             setOtherRowsActive();
@@ -2599,6 +2650,10 @@
               caseRow._resumeExtract = savedState.extractProgress;
             }
 
+            if (status.runId) {
+              caseRow._resumeRunId = status.runId;
+            }
+
             caseRow._aborted = true;
 
             // Disable limit inputs
@@ -2609,7 +2664,11 @@
               input.disabled = true;
             });
 
-            if (runBtn) runBtn.disabled = true;
+            if (runBtn) {
+              runBtn.disabled = true;
+              runBtn.title =
+                "Please reset the download/extraction to start a new download/extraction";
+            }
 
             if (resetBtn) {
               resetBtn.textContent = "Resume";

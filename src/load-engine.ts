@@ -54,12 +54,21 @@ interface ExtractWithRetryResult {
   attempts: number;
 }
 
+export class NetworkAbortError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "NetworkAbortError";
+  }
+}
+
 /**
- * Call the extract API with simple, configurable retries for transient errors.
- * Retries on:
- *   - statusCode === 0 (network/timeout)
- *   - 5xx responses
- *   - 429 (rate limit)
+ * Call the extract API with retries.
+ * Special handling for network errors (statusCode === 0):
+ * - Retry 5 times with 12s delay (total ~60s).
+ * - If still failing, throw NetworkAbortError to stop the entire run.
+ *
+ * Other transient errors (5xx, 429):
+ * - Retry based on config.run.maxRetries.
  */
 async function extractWithRetries(
   config: Config,
@@ -76,15 +85,9 @@ async function extractWithRetries(
   let attempt = 0;
   let last: ExtractResult;
 
-  // Helper to decide if a result is worth retrying.
-  function isRetriable(r: ExtractResult): boolean {
-    if (r.success) return false;
-    const code = r.statusCode;
-    if (code === 0) return true; // network / timeout / abort
-    if (code === 429) return true; // rate limit
-    if (code >= 500 && code < 600) return true; // server errors
-    return false;
-  }
+  // Network retry settings
+  const NETWORK_MAX_RETRIES = 5;
+  const NETWORK_RETRY_DELAY_MS = 12000;
 
   // eslint-disable-next-line no-constant-condition
   while (true) {
@@ -94,8 +97,37 @@ async function extractWithRetries(
       fileContentBase64: bodyBase64,
       brand: job.brand,
     });
-    if (!isRetriable(last)) break;
+
+    // Check for Network Error (statusCode === 0)
+    if (last.statusCode === 0) {
+      if (attempt <= NETWORK_MAX_RETRIES) {
+        // Log to stdout so user sees it
+        if (typeof process !== "undefined" && !process.stdout.isTTY) {
+          process.stdout.write(
+            `LOG\tNetwork interruption detected. Retry ${attempt}/${NETWORK_MAX_RETRIES} in ${NETWORK_RETRY_DELAY_MS / 1000}s...\n`,
+          );
+        }
+        await new Promise((resolve) =>
+          setTimeout(resolve, NETWORK_RETRY_DELAY_MS),
+        );
+        continue;
+      } else {
+        // Failed after all retries
+        throw new NetworkAbortError(
+          "Network interruption detected (max retries exceeded). Aborting run.",
+        );
+      }
+    }
+
+    if (last.success) break;
+
+    // Handle other retriable errors (5xx, 429)
+    const code = last.statusCode;
+    const isRetriable = code === 429 || (code >= 500 && code < 600);
+
+    if (!isRetriable) break;
     if (attempt > maxRetries) break;
+
     if (backoffBaseMs > 0) {
       const delay = backoffBaseMs * attempt; // simple linear backoff
       await new Promise((resolve) => setTimeout(resolve, delay));
@@ -295,12 +327,13 @@ export async function runExtraction(
     tenant?: string;
     purchaser?: string;
     pairs?: { tenant: string; purchaser: string }[];
+    runId?: string;
     /** Called after each file completes (done or error) so the report can be updated. */
     onFileComplete?: (runId: string) => void;
   },
 ): Promise<LoadEngineResult> {
   const db = openCheckpointDb(config.run.checkpointPath);
-  const runId = getOrCreateRunId(db);
+  const runId = options?.runId ?? getOrCreateRunId(db);
   const completed = config.run.skipCompleted
     ? getCompletedPaths(db)
     : new Set<string>();
@@ -324,10 +357,14 @@ export async function runExtraction(
   }
   const jobs = discoverStagingFiles(config.s3.stagingDir, buckets);
 
+  // Get records already associated with this run so we don't overwrite "done" with "skipped"
+  const existingRecordsParams = getRecordsForRun(db, runId);
+  const alreadyInRun = new Set(existingRecordsParams.map((r) => r.filePath));
+
   // Record files already completed as 'skipped' for this specific run so metrics
   // correctly identify them as such (not Success, not Failed). Batch upsert to avoid N file writes.
   const skippedRecords = jobs
-    .filter((j) => completed.has(j.filePath))
+    .filter((j) => completed.has(j.filePath) && !alreadyInRun.has(j.filePath))
     .map((job) => ({
       filePath: job.filePath,
       relativePath: job.relativePath,
@@ -375,6 +412,9 @@ export async function runExtraction(
   if (stdoutPiped && completed.size > 0 && total > 0) {
     process.stdout.write(`RESUME_SKIP\t${completed.size}\t${jobs.length}\n`);
   }
+  if (stdoutPiped) {
+    process.stdout.write(`RUN_ID\t${runIdToUse}\n`);
+  }
   if (stdoutPiped && total > 0) {
     process.stdout.write(`EXTRACTION_PROGRESS\t0\t${total}\n`);
   }
@@ -391,9 +431,16 @@ export async function runExtraction(
     }
   }
 
+  let aborted = false;
+
   for (const job of toProcess) {
+    // If already aborted, don't add more jobs
+    if (aborted) break;
+
     queue
       .add(async () => {
+        if (aborted) return;
+
         const started = new Date().toISOString();
         upsertCheckpoint(db, {
           filePath: job.filePath,
@@ -422,66 +469,95 @@ export async function runExtraction(
           return;
         }
 
-        const { result, attempts } = await extractWithRetries(
-          config,
-          job,
-          bodyBase64,
-        );
+        try {
+          const { result, attempts } = await extractWithRetries(
+            config,
+            job,
+            bodyBase64,
+          );
 
-        logRequestResponse({
-          runId: runIdToUse,
-          filePath: job.filePath,
-          brand: job.brand,
-          request: {
-            method: "POST",
-            url: getExtractUploadUrl(config),
-            bodyPreview: undefined,
-            bodyLength: bodyBase64?.length,
-          },
-          response: {
-            statusCode: result.statusCode,
-            latencyMs: result.latencyMs,
-            bodyPreview: result.body.slice(0, 500),
-            bodyLength: result.body.length,
-            headers: result.headers,
-          },
-          success: result.success,
-        });
+          logRequestResponse({
+            runId: runIdToUse,
+            filePath: job.filePath,
+            brand: job.brand,
+            request: {
+              method: "POST",
+              url: getExtractUploadUrl(config),
+              bodyPreview: undefined,
+              bodyLength: bodyBase64?.length,
+            },
+            response: {
+              statusCode: result.statusCode,
+              latencyMs: result.latencyMs,
+              bodyPreview: result.body.slice(0, 500),
+              bodyLength: result.body.length,
+              headers: result.headers,
+            },
+            success: result.success,
+          });
 
-        const status = result.success ? "done" : "error";
-        if (result.body) {
-          writeExtractionResult(config, runIdToUse, job, result.body);
-        }
-        const baseErrorSnippet = result.success
-          ? undefined
-          : result.body.slice(0, 500);
-        const errorMessage =
-          result.success || !baseErrorSnippet
+          const status = result.success ? "done" : "error";
+          if (result.body) {
+            writeExtractionResult(config, runIdToUse, job, result.body);
+          }
+          const baseErrorSnippet = result.success
             ? undefined
-            : attempts > 1
-              ? `${baseErrorSnippet} (after ${attempts} attempt${attempts === 1 ? "" : "s"})`
-              : baseErrorSnippet;
-        let patternKey: string | undefined;
-        if (result.success && result.body) {
-          try {
-            const parsed = JSON.parse(result.body);
-            patternKey = parsed.pattern?.pattern_key;
-          } catch (_) {}
-        }
+            : result.body.slice(0, 500);
+          const errorMessage =
+            result.success || !baseErrorSnippet
+              ? undefined
+              : attempts > 1
+                ? `${baseErrorSnippet} (after ${attempts} attempt${attempts === 1 ? "" : "s"})`
+                : baseErrorSnippet;
+          let patternKey: string | undefined;
+          if (result.success && result.body) {
+            try {
+              const parsed = JSON.parse(result.body);
+              patternKey = parsed.pattern?.pattern_key;
+            } catch (_) {}
+          }
 
-        upsertCheckpoint(db, {
-          filePath: job.filePath,
-          relativePath: job.relativePath,
-          brand: job.brand,
-          status,
-          startedAt: started,
-          finishedAt: new Date().toISOString(),
-          latencyMs: result.latencyMs,
-          statusCode: result.statusCode,
-          errorMessage,
-          patternKey,
-          runId: runIdToUse,
-        });
+          upsertCheckpoint(db, {
+            filePath: job.filePath,
+            relativePath: job.relativePath,
+            brand: job.brand,
+            status,
+            startedAt: started,
+            finishedAt: new Date().toISOString(),
+            latencyMs: result.latencyMs,
+            statusCode: result.statusCode,
+            errorMessage,
+            patternKey,
+            runId: runIdToUse,
+          });
+        } catch (err) {
+          if (err instanceof NetworkAbortError) {
+            aborted = true;
+            queue.clear(); // remove pending jobs
+            if (stdoutPiped) {
+              process.stdout.write(
+                `LOG\tNetwork interruption detected. Execution stopping. Resume later.\n`,
+              );
+            }
+            // Mark this current file as error/interrupted if needed, or leave as running?
+            // Best to mark as error so it can be picked up later? Or delete the running state?
+            // Since we have "running" checkpoint, if we leave it, Resume will retry it.
+            // But let's actally mark it as error so user knows why it stopped.
+            upsertCheckpoint(db, {
+              filePath: job.filePath,
+              relativePath: job.relativePath,
+              brand: job.brand,
+              status: "error",
+              startedAt: started,
+              finishedAt: new Date().toISOString(),
+              errorMessage:
+                typeof err.message === "string" ? err.message : "Network Abort",
+              runId: runIdToUse,
+            });
+            return;
+          }
+          throw err;
+        }
       })
       .finally(() => {
         done++;

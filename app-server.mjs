@@ -209,7 +209,8 @@ function readScheduleLogEntries() {
         if (entry && (entry.scheduleId || entry.message)) {
           if (entry.outcome === undefined) {
             entry.outcome =
-              entry.message && String(entry.message).toLowerCase().includes("skipped")
+              entry.message &&
+              String(entry.message).toLowerCase().includes("skipped")
                 ? "skipped"
                 : "executed";
           }
@@ -443,14 +444,28 @@ function addPairArgs(base, p) {
     base.push("--tenant", p.tenant, "--purchaser", p.purchaser);
   }
 }
-function syncArgs(p) {
+function syncArgs(p, runOpts) {
   const base = ["dist/index.js", "sync"];
-  if (p?.syncLimit > 0) base.push("--limit", String(p.syncLimit));
+  let limit = p?.syncLimit;
+
+  // If resuming, subtract the files already synced in the previous run
+  if (
+    runOpts &&
+    runOpts.resume &&
+    limit > 0 &&
+    runOpts.lastSyncDone !== undefined &&
+    runOpts.lastSyncDone > 0
+  ) {
+    limit = Math.max(0, limit - runOpts.lastSyncDone);
+  }
+
+  if (limit > 0) base.push("--limit", String(limit));
   addPairArgs(base, p);
   return ["node", base, { cwd: ROOT }];
 }
-function runArgs(p, extra = []) {
+function runArgs(p, extra = [], runOpts = null) {
   const base = ["dist/index.js", "run", ...extra];
+  if (runOpts && runOpts.runId) base.push("--run-id", runOpts.runId);
   if (p?.syncLimit > 0) base.push("--sync-limit", String(p.syncLimit));
   if (p?.extractLimit > 0) base.push("--extract-limit", String(p.extractLimit));
   addPairArgs(base, p);
@@ -459,6 +474,7 @@ function runArgs(p, extra = []) {
 function pipelineArgs(p, opts = {}) {
   const base = ["dist/index.js", "sync-extract"];
   if (opts.resume) base.push("--resume");
+  if (opts.runId) base.push("--run-id", opts.runId);
   const limit =
     p?.syncLimit !== undefined && Number(p.syncLimit) >= 0
       ? Number(p.syncLimit)
@@ -469,16 +485,26 @@ function pipelineArgs(p, opts = {}) {
 }
 
 const CASE_COMMANDS = {
-  P1: (p) => syncArgs(p),
-  P2: (p) => runArgs(p, ["--no-sync"]),
+  P1: (p, runOpts) => syncArgs(p, runOpts),
+  P2: (p, runOpts) => runArgs(p, ["--no-sync"], runOpts),
   PIPE: (p, opts) => pipelineArgs(p, opts || {}),
   P3: () => ["node", ["dist/index.js", "report"], { cwd: ROOT }],
-  P4: (p) => {
+  P4: (p, runOpts) => {
     const base = ["dist/index.js", "sync", "-c", "config/config.yaml"];
-    if (p?.syncLimit > 0) base.push("--limit", String(p.syncLimit));
+    let limit = p?.syncLimit;
+    if (
+      runOpts &&
+      runOpts.resume &&
+      limit > 0 &&
+      runOpts.lastSyncDone !== undefined &&
+      runOpts.lastSyncDone > 0
+    ) {
+      limit = Math.max(0, limit - runOpts.lastSyncDone);
+    }
+    if (limit > 0) base.push("--limit", String(limit));
     return ["node", base, { cwd: ROOT }];
   },
-  P5: (p) => runArgs(p, []),
+  P5: (p, runOpts) => runArgs(p, [], runOpts),
   P6: (p) => runArgs(p, ["--no-sync", "--no-report"]),
   P7: () => [
     "node",
@@ -498,8 +524,8 @@ const CASE_COMMANDS = {
     ["dist/index.js", "report", "--run-id", "run_0000000000_fake"],
     { cwd: ROOT },
   ],
-  N3: (p) => syncArgs(p),
-  E1: (p) => runArgs(p, ["--no-sync"]),
+  N3: (p, runOpts) => syncArgs(p, runOpts),
+  E1: (p, runOpts) => runArgs(p, ["--no-sync"], runOpts),
   E2: (p) => {
     const cp = join(ROOT, "output", "checkpoints", "checkpoint.json");
     if (existsSync(cp)) {
@@ -510,7 +536,7 @@ const CASE_COMMANDS = {
     }
     return runArgs(p, ["--no-sync"]);
   },
-  E3: (p) => syncArgs(p),
+  E3: (p, runOpts) => syncArgs(p, runOpts),
   E4: () => {
     const runId = getLastRunId() || "run_0000000000_fake";
     return [
@@ -527,6 +553,8 @@ const SYNC_PROGRESS_PREFIX = "SYNC_PROGRESS\t";
 const EXTRACTION_PROGRESS_PREFIX = "EXTRACTION_PROGRESS\t";
 const RESUME_SKIP_PREFIX = "RESUME_SKIP\t";
 const RESUME_SKIP_SYNC_PREFIX = "RESUME_SKIP_SYNC\t";
+const RUN_ID_PREFIX = "RUN_ID\t";
+const LOG_PREFIX = "LOG\t";
 
 function runCase(caseId, params = {}, callbacks = null, runOpts = null) {
   const def = CASE_COMMANDS[caseId];
@@ -599,6 +627,27 @@ function runCase(caseId, params = {}, callbacks = null, runOpts = null) {
             const total = Number(parts[1]);
             if (!Number.isNaN(skipped))
               onResumeSkipSync(skipped, Number.isNaN(total) ? 0 : total);
+          }
+        }
+        if (line.startsWith(RUN_ID_PREFIX)) {
+          const parts = line.slice(RUN_ID_PREFIX.length).split("\t");
+          if (parts.length >= 1) {
+            const runId = parts[0].trim();
+            if (child.stdout && !child.stdout.destroyed) {
+              child.stdout.emit(
+                "data",
+                JSON.stringify({ type: "run_id", runId }) + "\n",
+              );
+            }
+          }
+        }
+        if (line.startsWith(LOG_PREFIX)) {
+          const message = line.slice(LOG_PREFIX.length).trim();
+          if (child.stdout && !child.stdout.destroyed) {
+            child.stdout.emit(
+              "data",
+              JSON.stringify({ type: "log", message }) + "\n",
+            );
           }
         }
       }

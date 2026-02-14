@@ -209,6 +209,7 @@ program
     "--pairs <json>",
     'JSON array of {tenant, purchaser} to scope (e.g. \'[{"tenant":"a","purchaser":"p"}]\')',
   )
+  .option("-r, --run-id <id>", "Resume with existing run ID")
   .action(
     async (opts: {
       sync: boolean;
@@ -218,6 +219,7 @@ program
       tenant?: string;
       purchaser?: string;
       pairs?: string;
+      runId?: string;
     }) => {
       try {
         const globalOpts = program.opts() as { config?: string };
@@ -257,6 +259,7 @@ program
               tenant,
               purchaser,
               pairs,
+              runId: opts.runId,
               onFileComplete: doReport
                 ? (runId) => writeReportsForRunId(config, runId)
                 : undefined,
@@ -267,6 +270,7 @@ program
               tenant,
               purchaser,
               pairs,
+              runId: opts.runId,
               onFileComplete: doReport
                 ? (runId) => writeReportsForRunId(config, runId)
                 : undefined,
@@ -328,6 +332,7 @@ program
   )
   .option("--pairs <json>", "JSON array of {tenant, purchaser} to scope")
   .option("--no-report", "Do not write report after run")
+  .option("-r, --run-id <id>", "Resume with existing run ID")
   .action(
     async (cmdOpts: {
       limit?: number;
@@ -336,6 +341,7 @@ program
       purchaser?: string;
       pairs?: string;
       report?: boolean;
+      runId?: string;
     }) => {
       try {
         const globalOpts = program.opts() as { config?: string };
@@ -388,6 +394,7 @@ program
           tenant,
           purchaser,
           pairs,
+          runId: cmdOpts.runId,
           onProgress: stdoutPiped
             ? (done, total) => {
                 process.stdout.write(`SYNC_PROGRESS\t${done}\t${total}\n`);

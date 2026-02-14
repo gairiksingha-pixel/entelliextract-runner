@@ -10,6 +10,7 @@ import {
   extractOneFile,
   type FileJob,
   type LoadEngineResult,
+  NetworkAbortError,
 } from "./load-engine.js";
 import {
   openCheckpointDb,
@@ -48,6 +49,8 @@ export interface RunOptions {
   pairs?: TenantPurchaserPair[];
   /** Called after each file completes so the report can be updated. */
   onFileComplete?: (runId: string) => void;
+  /** Resume with existing run ID if provided. */
+  runId?: string;
 }
 
 /** Single limit for pipeline mode: sync up to N files and extract each as it is synced (in background). */
@@ -131,6 +134,7 @@ export async function runFull(
     tenant: options.tenant,
     purchaser: options.purchaser,
     pairs: options.pairs,
+    runId: options.runId,
     onFileComplete: options.onFileComplete,
   });
   const metrics = computeMetrics(
@@ -182,10 +186,19 @@ export async function runSyncExtractPipeline(
     limit !== undefined && limit > 0 ? limit : undefined;
 
   const db = openCheckpointDb(config.run.checkpointPath);
-  const runId = options.resume
-    ? (getCurrentRunId(db) ?? startRun(db))
-    : startRun(db);
+  const runId =
+    options.runId ??
+    (options.resume ? (getCurrentRunId(db) ?? startRun(db)) : startRun(db));
   initRequestResponseLogger(config, runId);
+
+  const stdoutPiped = !process.stdout.isTTY;
+  const limitNum = limit ?? 0; // Use 0 if limit is undefined for output purposes
+
+  if (stdoutPiped) {
+    process.stdout.write(`SYNC_PROGRESS\t0\t${limitNum}\n`);
+    process.stdout.write(`RUN_ID\t${runId}\n`);
+  }
+  if (stdoutPiped) process.stdout.write("EXTRACTION_PROGRESS\t0\t0\n");
 
   const completed = config.run.skipCompleted
     ? getCompletedPaths(db)
@@ -214,7 +227,10 @@ export async function runSyncExtractPipeline(
     runId: string;
   }> = [];
 
+  let aborted = false;
+
   const onFileSynced = (job: FileJob) => {
+    if (aborted) return;
     clearResumeState(config);
     extractionQueued++;
 
@@ -233,15 +249,30 @@ export async function runSyncExtractPipeline(
       } catch (_) {}
       return; // Skip adding to queue
     }
-    extractionQueue.add(() =>
-      extractOneFile(config, runId, db, job).finally(() => {
+    extractionQueue.add(async () => {
+      if (aborted) return;
+      try {
+        await extractOneFile(config, runId, db, job);
+      } catch (err) {
+        if (err instanceof NetworkAbortError) {
+          aborted = true;
+          extractionQueue.clear();
+          if (stdoutPiped) {
+            process.stdout.write(
+              `LOG\tNetwork interruption detected. Execution stopping. Resume later.\n`,
+            );
+          }
+          return;
+        }
+        throw err;
+      } finally {
         extractionDone++;
         options.onExtractionProgress?.(extractionDone, extractionQueued);
         try {
           options.onFileComplete?.(runId);
         } catch (_) {}
-      }),
-    );
+      }
+    });
   };
 
   syncResults = await syncAllBuckets(config, {

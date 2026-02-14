@@ -155,7 +155,7 @@ function filterExtractionResultsForRun(
 }
 
 function minMaxDatesFromRecords(
-  records: { startedAt?: string; finishedAt?: string }[],
+  records: { startedAt?: string; finishedAt?: string; runId?: string }[],
 ) {
   let startedAt = Number.NaN;
   let finishedAt = Number.NaN;
@@ -171,9 +171,42 @@ function minMaxDatesFromRecords(
     }
   }
 
-  const start = Number.isNaN(startedAt) ? new Date(0) : new Date(startedAt);
+  let start: Date;
+  if (!Number.isNaN(startedAt)) {
+    start = new Date(startedAt);
+  } else {
+    // Fallback: try to parse date from runId of the first record
+    const runId = records[0]?.runId;
+    if (runId && runId.startsWith("run_")) {
+      // run_YYYY-MM-DD_HH-mm-ss_suffix
+      const parts = runId.split("_");
+      if (parts.length >= 3) {
+        const datePart = parts[1]; // YYYY-MM-DD
+        const timePart = parts[2]; // HH-mm-ss
+        const iso = `${datePart}T${timePart.replace(/-/g, ":")}Z`; // Treat as UTC or local? Original format uses local components but Date() might need help.
+        // Actually, formatRunId uses local time components.
+        // Let's try constructing it.
+        try {
+          // run_2026-02-14_13-53-49 -> 2026-02-14T13:53:49
+          const d = new Date(`${datePart}T${timePart.replace(/-/g, ":")}`);
+          if (!Number.isNaN(d.getTime())) {
+            start = d;
+          } else {
+            start = new Date(0);
+          }
+        } catch {
+          start = new Date(0);
+        }
+      } else {
+        start = new Date(0);
+      }
+    } else {
+      start = new Date(0);
+    }
+  }
+
   const end = Number.isNaN(finishedAt)
-    ? new Date(startedAt || Date.now())
+    ? new Date(start.getTime() || Date.now())
     : new Date(finishedAt);
 
   return { start, end };
