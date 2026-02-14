@@ -1295,6 +1295,16 @@ createServer(async (req, res) => {
         return;
       }
       const list = loadSchedules();
+      // Check for duplicates
+      if (list.some((s) => s.cron === cronExpr && s.timezone === timezone)) {
+        res.writeHead(400, { "Content-Type": "application/json" });
+        res.end(
+          JSON.stringify({
+            error: "A schedule for this time and timezone already exists.",
+          }),
+        );
+        return;
+      }
       const sched = {
         id: scheduleId(),
         createdAt: new Date().toISOString(),
@@ -1372,6 +1382,20 @@ createServer(async (req, res) => {
       if (idx === -1) {
         res.writeHead(404, { "Content-Type": "application/json" });
         res.end(JSON.stringify({ error: "Schedule not found" }));
+        return;
+      }
+      // Check for duplicates (excluding self)
+      if (
+        list.some(
+          (s, i) => i !== idx && s.cron === cronExpr && s.timezone === timezone,
+        )
+      ) {
+        res.writeHead(400, { "Content-Type": "application/json" });
+        res.end(
+          JSON.stringify({
+            error: "A schedule for this time and timezone already exists.",
+          }),
+        );
         return;
       }
       const updated = {

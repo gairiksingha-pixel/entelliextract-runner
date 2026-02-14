@@ -2895,6 +2895,7 @@
 
       var BRAND_PURCHASERS = {};
       var ALL_PURCHASERS = [];
+      var ALL_SCHEDULES = [];
       function formatBrandName(brandId) {
         if (!brandId) return "";
         if (brandId.includes("no-cow")) return "No Cow";
@@ -3310,6 +3311,39 @@
           (schedule ? "Update schedule" : "Save schedule") +
           "</button></div>";
 
+        function updateDisabledCronOptions() {
+          var cronEl = document.getElementById("sched-cron");
+          var tzEl = document.getElementById("sched-tz");
+          if (!cronEl || !tzEl) return;
+          var selectedTz = tzEl.value;
+          var options = cronEl.querySelectorAll("option");
+          options.forEach(function (opt) {
+            var cronVal = opt.value;
+            var inUse = ALL_SCHEDULES.some(function (s) {
+              return (
+                s.cron === cronVal &&
+                s.timezone === selectedTz &&
+                (!schedule || s.id !== schedule.id)
+              );
+            });
+            if (inUse) {
+              opt.disabled = true;
+              if (opt.textContent.indexOf(" (In Use)") === -1) {
+                opt.textContent += " (In Use)";
+              }
+            } else {
+              opt.disabled = false;
+              opt.textContent = opt.textContent.replace(" (In Use)", "");
+            }
+          });
+        }
+
+        var tzEl = document.getElementById("sched-tz");
+        if (tzEl) {
+          tzEl.addEventListener("change", updateDisabledCronOptions);
+        }
+        updateDisabledCronOptions();
+
         refreshSchedulePurchaserOptions();
         var brandTrigger = document.getElementById(
           "sched-brand-dropdown-trigger",
@@ -3423,8 +3457,9 @@
             return r.json();
           })
           .then(function (data) {
+            ALL_SCHEDULES = data.schedules || [];
             renderScheduleListView({
-              schedules: data.schedules || [],
+              schedules: ALL_SCHEDULES,
               timezones: data.timezones || [],
             });
           })
@@ -3548,6 +3583,19 @@
         }
         if (!timezone) {
           errorEl.textContent = "Timezone is required.";
+          return;
+        }
+        // Final duplicate check
+        var isDuplicate = ALL_SCHEDULES.some(function (s) {
+          return (
+            s.cron === cron &&
+            s.timezone === timezone &&
+            (!schedule || s.id !== schedule.id)
+          );
+        });
+        if (isDuplicate) {
+          errorEl.textContent =
+            "A schedule for this time and timezone already exists.";
           return;
         }
         var url = "/api/schedules";

@@ -365,8 +365,10 @@ export function loadHistoricalRunSummaries(
       // Fix for the title: the user wants the latest timestamp for the accordion title.
       metrics.startedAt = latestRun.start.toISOString();
 
-      const runDurationSeconds =
-        (clusterEnd.getTime() - clusterStart.getTime()) / 1000;
+      const runDurationSeconds = cluster.reduce(
+        (sum, c) => sum + (c.end.getTime() - c.start.getTime()) / 1000,
+        0,
+      );
 
       out.push({
         runId: latestRun.runId,
