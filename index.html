@@ -3149,7 +3149,11 @@
                     set.add(p);
                   });
                 });
-                return Array.from(set).sort();
+                return Array.from(set).sort(function (a, b) {
+                  var la = formatPurchaserName(a).toLowerCase();
+                  var lb = formatPurchaserName(b).toLowerCase();
+                  return la < lb ? -1 : la > lb ? 1 : 0;
+                });
               })();
         var currentChecked = getSelectedSchedulePurchasers();
         panel.innerHTML = opts
@@ -3161,7 +3165,7 @@
               '"' +
               checked +
               "> " +
-              escapeHtml(p) +
+              escapeHtml(formatPurchaserName(p)) +
               "</label>"
             );
           })
@@ -3176,7 +3180,11 @@
       function renderScheduleCreateForm(timezones, schedule) {
         var body = document.getElementById("schedule-modal-body");
         if (!body) return;
-        var brands = Object.keys(BRAND_PURCHASERS || {});
+        var brands = Object.keys(BRAND_PURCHASERS || {}).sort(function (a, b) {
+          var la = formatBrandName(a).toLowerCase();
+          var lb = formatBrandName(b).toLowerCase();
+          return la < lb ? -1 : la > lb ? 1 : 0;
+        });
         var tz =
           Array.isArray(timezones) && timezones.length ? timezones : ["UTC"];
         var brandOptions = brands

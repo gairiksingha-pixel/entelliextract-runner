@@ -6,6 +6,8 @@ TypeScript runner and browser app for the IntelliExtract spreadsheet extraction 
 
 - **S3 sync to staging**: Syncs from a single S3 bucket with tenant/purchaser folders into a local `output/staging/...` tree, with optional sync limits and SHA-256 based skip-on-checksum.
 - **File-level checkpointing**: Stores status per file (`done`, `error`, `skipped`) in `checkpoint.json` so runs can be resumed without reprocessing completed files.
+- **Scheduled runs**: Built-in cron-based scheduler to run sync+extract pipelines automatically at configured times/intervals.
+- **Process management**: View active runs, track progress, and stop/cancel running processes directly from the UI.
 - **Configurable load (RPS + concurrency)**: `run.concurrency` and `run.requestsPerSecond` let you simulate different load profiles against the IntelliExtract API.
 - **Full request/response logging**: Writes JSONL logs per run with request, response, headers, and timing for every API call.
 - **Extraction result classification**: For every file, the full extract API JSON response is stored and classified using the response body’s `success` flag (`"success": true` → successful response, `"success": false` → failed response). Upload/read failures are counted as **failed file uploads**.
@@ -73,7 +75,16 @@ Use the browser app to run sync, extract, and pipeline scenarios and verify your
    - Visit [http://localhost:8765/](http://localhost:8765/).
    - Select **Brand** and **Purchaser**, set limits if needed, then click **Run** to execute a scenario; output appears inline.
 
-4. **Review reports and logs**:
+4. **Schedule runs**:
+   - Go to the **Schedule** tab to configure automated cron jobs for sync/extract pipelines.
+   - Set brands/purchasers, cron expression (e.g. `0 * * * *` for hourly), and timezone.
+
+5. **Manage processes**:
+   - The **History** modal shows past runs and their status.
+   - The **Active Runs** indicator shows currently running processes.
+   - You can **Stop** any running process from the UI if needed.
+
+6. **Review reports and logs**:
    - Open the generated HTML report under `output/reports/` to see throughput, error rate, and per-run details.
    - Inspect `output/logs/request-response_<runId>.jsonl` for full API request/response traces.
 
