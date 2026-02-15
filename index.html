@@ -41,6 +41,8 @@
         --shadow-lg: 0 3.4px 10.2px rgba(0, 0, 0, 0.08);
         --shadow-inset: inset 0 0.85px 1.7px rgba(0, 0, 0, 0.06);
         --shadow-btn: 0 0.85px 2.55px rgba(0, 0, 0, 0.12);
+        --warning: #f59e0b;
+        --warning-hover: #d97706;
       }
       * {
         box-sizing: border-box;
@@ -246,6 +248,18 @@
       }
       .filter-dropdown-panel.open {
         display: block;
+        animation: dropdownSlideDown 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+        transform-origin: top;
+      }
+      @keyframes dropdownSlideDown {
+        from {
+          opacity: 0;
+          transform: translateY(-8px) scaleY(0.95);
+        }
+        to {
+          opacity: 1;
+          transform: translateY(0) scaleY(1);
+        }
       }
       .filter-dropdown-option {
         display: flex;
@@ -268,35 +282,35 @@
       }
       .header-btn-reset {
         height: 34px;
-        padding: 0 0.85rem;
-        min-width: 180px;
-        border: 0.85px solid #244a7a;
+        padding: 0 0.5rem;
+        width: 180px;
+        border: 0.85px solid var(--header-border);
         border-radius: var(--radius-sm);
-        background: #2f5496;
+        background: var(--header-bg);
         color: var(--header-text);
         font-size: 0.875rem;
         font-weight: 600;
         font-family: inherit;
         cursor: pointer;
-        box-shadow:
-          0 0.85px 1.7px rgba(0, 0, 0, 0.1),
-          inset 0 0.85px 0 rgba(255, 255, 255, 0.15);
-        transition:
-          background 0.15s ease,
-          border-color 0.15s ease,
-          box-shadow 0.15s ease;
+        box-shadow: var(--shadow-btn);
+        transition: all 0.2s ease;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
       }
       .header-btn-reset:focus {
         outline: none;
         border-color: var(--header-text);
-        box-shadow:
-          0 0 0 1.7px rgba(255, 255, 255, 0.3),
-          0 1.7px 3.4px rgba(0, 0, 0, 0.1);
+        box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.3);
       }
       .header-btn-reset:hover {
-        background: #244a7a;
-        border-color: #244a7a;
-        color: var(--header-text);
+        background: var(--primary-hover);
+        border-color: var(--primary-hover);
+        box-shadow: 0 2px 4px rgba(0, 0, 0, 0.15);
+        transform: translateY(-1px);
+      }
+      .header-btn-reset:active {
+        transform: translateY(0);
       }
       .main {
         flex: 1;
@@ -392,6 +406,30 @@
         max-width: 181.9px;
         font-weight: 600;
       }
+      .op-content-wrap {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 0.425rem;
+        line-height: 1.25;
+        text-align: center;
+        width: 100%;
+        margin: 0 auto;
+      }
+      .op-icon-wrap {
+        width: 2.2rem;
+        height: 2.2rem;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        flex-shrink: 0;
+        color: var(--primary);
+      }
+      .op-icon-wrap svg {
+        width: 100%;
+        height: 100%;
+        fill: none;
+      }
       thead th.op-name {
         color: var(--header-text);
       }
@@ -399,6 +437,9 @@
         background: var(--header-bg);
         color: #ffffff;
         border-color: var(--header-border);
+      }
+      tbody td.op-name .op-icon-wrap {
+        color: #ffffff;
       }
       tbody tr:hover td.op-name {
         background: var(--header-bg);
@@ -564,6 +605,17 @@
         border-color: #a00;
         color: #fff;
       }
+      button.reset-case.pause-btn {
+        background: var(--warning);
+        color: #fff;
+        border-color: var(--warning);
+        box-shadow: var(--shadow-btn);
+      }
+      button.reset-case.pause-btn:hover {
+        background: var(--warning-hover);
+        border-color: var(--warning-hover);
+        color: #fff;
+      }
       button.reset-case.resume-btn {
         background: var(--accent-light);
         border-color: var(--accent);
@@ -586,47 +638,57 @@
       }
       button.download-sync-report-btn,
       button.download-report-btn {
+        height: 34px;
         border: none;
         border-radius: var(--radius-sm);
-        padding: 0.468rem 0.722rem;
-        font-size: 0.85rem;
+        padding: 0 0.5rem;
+        font-size: 0.875rem;
         font-weight: 600;
         cursor: pointer;
         font-family: inherit;
         box-sizing: border-box;
         box-shadow: var(--shadow-btn);
         color: #fff;
-        min-width: 180px;
+        width: 180px;
+        transition: all 0.2s ease;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+      }
+      button.download-sync-report-btn:hover:not(:disabled),
+      button.download-report-btn:hover:not(:disabled) {
+        box-shadow: 0 2px 4px rgba(0, 0, 0, 0.15);
+        transform: translateY(-1px);
+      }
+      button.download-sync-report-btn:active:not(:disabled),
+      button.download-report-btn:active:not(:disabled) {
+        transform: translateY(0);
       }
       button.download-sync-report-btn {
-        background: #2f5496;
+        background: var(--header-bg);
       }
       button.download-sync-report-btn:hover:not(:disabled) {
-        background: #244a7a;
-        box-shadow: 0 1.7px 5.1px rgba(0, 0, 0, 0.2);
+        background: var(--primary-hover);
       }
       button.download-report-btn.download-report-html-btn {
-        background: #2f5496;
+        background: var(--header-bg);
       }
       button.download-report-btn.download-report-html-btn:hover:not(:disabled) {
-        background: #244a7a;
-        box-shadow: 0 1.7px 5.1px rgba(0, 0, 0, 0.2);
+        background: var(--primary-hover);
       }
       button.download-report-btn.download-report-json-btn {
-        background: #2f5496;
+        background: var(--header-bg);
       }
       button.download-report-btn.download-report-json-btn:hover:not(:disabled) {
-        background: #244a7a;
-        box-shadow: 0 1.7px 5.1px rgba(0, 0, 0, 0.2);
+        background: var(--primary-hover);
       }
       button.download-report-btn.download-report-schedule-btn {
-        background: #2f5496;
+        background: var(--header-bg);
       }
       button.download-report-btn.download-report-schedule-btn:hover:not(
           :disabled
         ) {
-        background: #244a7a;
-        box-shadow: 0 1.7px 5.1px rgba(0, 0, 0, 0.2);
+        background: var(--primary-hover);
       }
       button.download-sync-report-btn:disabled,
       button.download-report-btn:disabled {
@@ -637,7 +699,7 @@
         display: flex;
         align-items: center;
         gap: 0.637rem;
-        padding: 0.51rem 0.85rem;
+        padding: 0.51rem 1.275rem;
         background: var(--surface);
         border: 0.85px solid var(--border-light);
         border-radius: 0;
@@ -781,7 +843,7 @@
       .result.result-placeholder .result-placeholder-text {
         color: var(--muted);
         font-size: 0.85rem;
-        font-style: italic;
+        font-style: normal;
       }
       .result.result-validation-alert .result-placeholder-text {
         color: var(--fail);
@@ -888,6 +950,15 @@
       }
       .modal-overlay.open {
         display: flex;
+        animation: fadeIn 0.3s ease-out;
+      }
+      @keyframes fadeIn {
+        from {
+          opacity: 0;
+        }
+        to {
+          opacity: 1;
+        }
       }
       .modal {
         background: var(--surface);
@@ -902,6 +973,17 @@
         box-sizing: border-box;
         display: flex;
         flex-direction: column;
+        animation: modalScaleUp 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
+      }
+      @keyframes modalScaleUp {
+        from {
+          opacity: 0;
+          transform: scale(0.9) translateY(20px);
+        }
+        to {
+          opacity: 1;
+          transform: scale(1) translateY(0);
+        }
       }
       .modal-header {
         display: flex;
@@ -946,20 +1028,30 @@
         background: var(--row-alt);
       }
       .btn-secondary {
+        height: 34px;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
         background: var(--surface);
         color: var(--text-secondary);
         border: 0.85px solid var(--border);
         border-radius: var(--radius-sm);
-        padding: 0.46rem 0.85rem;
-        font-size: 0.85rem;
+        padding: 0 1.25rem;
+        font-size: 0.875rem;
         font-weight: 600;
         cursor: pointer;
         font-family: inherit;
         box-shadow: var(--shadow-sm);
+        transition: all 0.2s ease;
       }
       .btn-secondary:hover {
         background: var(--row-alt);
         color: var(--text);
+        box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+        transform: translateY(-1px);
+      }
+      .btn-secondary:active {
+        transform: translateY(0);
       }
       .schedule-header-row {
         display: flex;
@@ -1042,18 +1134,24 @@
       .schedule-select,
       .schedule-input {
         width: 100%;
-        height: 27.2px;
-        padding: 0.297rem 0.51rem;
+        height: 34px;
+        padding: 0.297rem 1.7rem 0.297rem 0.51rem;
         border: 0.85px solid var(--border);
         border-radius: var(--radius-sm);
         background: var(--surface);
         color: var(--text);
-        font-size: 0.85rem;
+        font-size: 0.875rem;
         font-family: inherit;
         box-sizing: border-box;
         box-shadow:
           0 0.85px 1.7px rgba(0, 0, 0, 0.06),
           inset 0 0.85px 0.85px rgba(255, 255, 255, 0.8);
+      }
+      .schedule-select {
+        appearance: none;
+        background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='%23505050' d='M2.5 4.5L6 8l3.5-3.5H2.5z'/%3E%3C/svg%3E");
+        background-repeat: no-repeat;
+        background-position: right 0.85rem center;
       }
       .schedule-select:focus,
       .schedule-input:focus {
@@ -1221,21 +1319,29 @@
           });
         }
       })();
+
+      const ICON_SYNC = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 0 0-9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/><path d="M3 12a9 9 0 0 0 9 9 9.75 9.75 0 0 0 6.74-2.74L21 16"/><path d="M16 21h5v-5"/></svg>`;
+      const ICON_EXTRACT = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z"/><polyline points="14 2 14 8 20 8"/><path d="M12 18v-6"/><path d="M9 15l3 3 3-3"/></svg>`;
+      const ICON_PIPELINE = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="6" width="20" height="12" rx="2"/><path d="M6 12h4"/><path d="M14 12h4"/><circle cx="12" cy="12" r="2"/></svg>`;
+
       const ROWS = [
         {
           id: "P1",
           scenario: "S3 Sync — Download files to staging.",
           limits: { sync: true, extract: false },
+          iconHtml: ICON_SYNC,
         },
         {
           id: "P2",
           scenario: "Extract — Run extraction with staging files (No S3 sync).",
           limits: { sync: false, extract: true },
+          iconHtml: ICON_EXTRACT,
         },
         {
           id: "PIPE",
           scenario: "Sync & Extract — Sync from S3 then extract in one run.",
           limits: { pipeline: true },
+          iconHtml: ICON_PIPELINE,
         },
       ];
 
@@ -1316,7 +1422,14 @@
         };
         tr.innerHTML =
           '<td class="op-name">' +
+          '<div class="op-content-wrap">' +
+          '<div class="op-icon-wrap">' +
+          c.iconHtml +
+          "</div>" +
+          "<span>" +
           escapeHtml(c.scenario) +
+          "</span>" +
+          "</div>" +
           "</td>" +
           renderLimitsCell(c) +
           '<td class="run-cell"><div class="btn-group"><div class="btn-row"></div></div></td>';
@@ -1789,7 +1902,7 @@
           );
           if (resetBtn) {
             resetBtn.textContent = "Reset";
-            resetBtn.classList.remove("stop-btn", "resume-btn");
+            resetBtn.classList.remove("stop-btn", "resume-btn", "pause-btn");
             resetBtn.onclick = function () {
               resetCase(resultDiv);
             };
@@ -1802,11 +1915,11 @@
       }
 
       var OTHER_RUN_DISABLED_TITLE =
-        "Please stop the other run to execute this.";
+        "Please pause/stop the other run to execute this.";
       var RESUME_OTHER_DISABLED_TITLE =
         "Please reset the other case to execute this.";
       var ROW_INACTIVE_HOVER_TITLE =
-        "Please stop and reset the current process to execute this.";
+        "Please pause/stop and reset the current process to execute this.";
       function setOtherRowsInactive(currentRow, title) {
         var tbody = document.getElementById("rows");
         if (!tbody) return;
@@ -1978,7 +2091,7 @@
         function restoreResetBtn() {
           if (resetBtn) {
             resetBtn.textContent = "Reset";
-            resetBtn.classList.remove("stop-btn", "resume-btn");
+            resetBtn.classList.remove("stop-btn", "resume-btn", "pause-btn");
             resetBtn.onclick = function () {
               resetCase(resultDiv);
             };
@@ -1996,7 +2109,7 @@
         if (row && !isResume && row._activeController) {
           if (resetBtn) {
             resetBtn.textContent = "Resume";
-            resetBtn.classList.remove("stop-btn");
+            resetBtn.classList.remove("stop-btn", "pause-btn");
             resetBtn.classList.add("resume-btn");
             resetBtn.onclick = function () {
               runCase(caseId, btn, resultDiv, { resume: true });
@@ -2026,8 +2139,9 @@
 
         if (resetBtn) {
           resetBtn.textContent = "Pause";
+          resetBtn.title = "Pause/Stop the execution";
           resetBtn.classList.remove("resume-btn");
-          resetBtn.classList.add("stop-btn");
+          resetBtn.classList.add("pause-btn");
           resetBtn.onclick = function () {
             controller.abort();
           };
@@ -2326,7 +2440,7 @@
               }
               if (resetBtn) {
                 resetBtn.textContent = "Resume";
-                resetBtn.classList.remove("stop-btn");
+                resetBtn.classList.remove("stop-btn", "pause-btn");
                 resetBtn.classList.add("resume-btn");
                 resetBtn.onclick = function () {
                   runCase(caseId, btn, resultDiv, { resume: true });
@@ -2436,7 +2550,7 @@
                   // Run finished
                   if (resetBtn) {
                     resetBtn.textContent = "Reset";
-                    resetBtn.classList.remove("stop-btn");
+                    resetBtn.classList.remove("stop-btn", "pause-btn");
                     resetBtn.disabled = false;
                     resetBtn.onclick = function () {
                       resetCase(resultDiv);
@@ -2483,9 +2597,9 @@
               if (run.origin === "scheduled") {
                 // Setup buttons for background job
                 if (resetBtn) {
-                  resetBtn.textContent = "Stop Auto Extraction";
+                  resetBtn.textContent = "Pause Auto Extraction";
                   resetBtn.classList.remove("resume-btn");
-                  resetBtn.classList.add("stop-btn");
+                  resetBtn.classList.add("pause-btn");
                   resetBtn.onclick = function () {
                     window.stopBackgroundJob(run.caseId);
                   };
@@ -2493,7 +2607,7 @@
                 if (runBtn) runBtn.disabled = true;
                 setOtherRowsInactive(
                   caseRow,
-                  "Background auto extraction is running. Stop it to run another case.",
+                  "Background auto extraction is running. Pause/stop it to run another case.",
                 );
 
                 // Show initial progress and start polling
@@ -2532,7 +2646,7 @@
               if (resetBtn) {
                 resetBtn.textContent = "Pause";
                 resetBtn.classList.remove("resume-btn");
-                resetBtn.classList.add("stop-btn");
+                resetBtn.classList.add("pause-btn");
                 // Note: We can't set onclick to actually stop since the process is in memory
                 // User will need to manually refresh or the process will complete
               }
@@ -2672,7 +2786,7 @@
 
             if (resetBtn) {
               resetBtn.textContent = "Resume";
-              resetBtn.classList.remove("stop-btn");
+              resetBtn.classList.remove("stop-btn", "pause-btn");
               resetBtn.classList.add("resume-btn");
               resetBtn.onclick = function () {
                 runCase(caseId, runBtn, resultDiv, { resume: true });
@@ -2710,7 +2824,7 @@
 
             setOtherRowsInactive(
               caseRow,
-              "Resume the stopped process or reset it to enable other runs",
+              "Resume the paused/stopped process or reset it to enable other runs",
             );
           })
           .catch(function () {});
@@ -2761,7 +2875,7 @@
         var btns = document.getElementById("download-bar-btns");
         var scheduleBtn = document.createElement("button");
         scheduleBtn.type = "button";
-        scheduleBtn.textContent = "Schedule Extraction";
+        scheduleBtn.textContent = "Add a Schedule";
         scheduleBtn.className =
           "download-report-btn download-report-schedule-btn";
         scheduleBtn.style.marginLeft = "auto";
@@ -3014,6 +3128,7 @@
           overlay.classList.remove("open");
           overlay.setAttribute("aria-hidden", "true");
         }
+        window.closeScheduleModal = close;
         if (closeIcon) closeIcon.onclick = close;
         overlay.addEventListener("click", function (e) {
           if (e.target === overlay) close();
@@ -3114,6 +3229,8 @@
           html += "</tbody></table></div>";
         }
         html += "</div>";
+        html +=
+          '<div class="modal-footer" style="margin-top:0.85rem;"><button type="button" class="btn-secondary" onclick="window.closeScheduleModal()">Cancel</button></div>';
         body.innerHTML = html;
         var createBtn = document.getElementById("schedule-create-btn");
         if (createBtn) {
@@ -3309,7 +3426,7 @@
           "<strong>⚠ Note:</strong> Make sure no Sync &amp; Extract or any other process is running at the scheduled time. If any manual process is active, or any process is in <strong>paused (Resume)</strong> mode, when the cron triggers, the scheduled run will be <strong>skipped</strong>." +
           "</div>" +
           '<div class="modal-footer" style="margin-top:0.85rem;"><button type="button" id="schedule-cancel-btn" class="btn-secondary">Cancel</button><button type="button" id="schedule-save-btn" class="download-report-btn download-report-schedule-btn">' +
-          (schedule ? "Update schedule" : "Save schedule") +
+          (schedule ? "Update schedule" : "Save Schedule") +
           "</button></div>";
 
         function updateDisabledCronOptions() {
@@ -3473,7 +3590,7 @@
         var body = document.getElementById("schedule-modal-body");
         if (!body) return;
         body.innerHTML =
-          '<div class="schedule-header-row"><div>Schedule run history</div><button type="button" id="schedule-log-back-btn" class="btn-secondary">Back to Schedules</button></div><div class="schedule-empty">Loading…</div>';
+          '<div class="schedule-header-row"><div>Schedule run history</div><button type="button" id="schedule-log-back-btn" class="btn-secondary">Back to Schedules</button></div><div class="schedule-empty">Loading…</div><div class="modal-footer" style="margin-top:0.85rem;"><button type="button" class="btn-secondary" onclick="window.closeScheduleModal()">Cancel</button></div>';
         var backBtn = document.getElementById("schedule-log-back-btn");
         if (backBtn) {
           backBtn.onclick = function () {
@@ -3488,7 +3605,7 @@
           .then(function (data) {
             var entries = data.entries || [];
             var html =
-              '<div class="schedule-header-row"><div>Schedule run history</div><button type="button" id="schedule-log-back-btn" class="btn-secondary">Back to Schedules</button></div><div style="flex:1;overflow-y:auto;">';
+              '<div class="schedule-header-row"><div>Schedule run history</div><button type="button" id="schedule-log-back-btn" class="btn-secondary">Back to Schedules</button></div><div style="flex:1;display:flex;flex-direction:column;overflow-y:auto;">';
             if (!entries.length) {
               html +=
                 '<div class="schedule-empty">No schedule run log yet. Skipped and executed runs will appear here.</div>';
@@ -3528,6 +3645,8 @@
               html += "</tbody></table>";
             }
             html += "</div>";
+            html +=
+              '<div class="modal-footer" style="margin-top:0.85rem;"><button type="button" class="btn-secondary" onclick="window.closeScheduleModal()">Cancel</button></div>';
             body.innerHTML = html;
             backBtn = document.getElementById("schedule-log-back-btn");
             if (backBtn) {
@@ -3538,7 +3657,7 @@
           })
           .catch(function () {
             body.innerHTML =
-              '<div class="schedule-header-row"><div>Schedule run history</div><button type="button" id="schedule-log-back-btn" class="btn-secondary">Back to Schedules</button></div><div class="schedule-empty">Could not load schedule log.</div>';
+              '<div class="schedule-header-row"><div>Schedule run history</div><button type="button" id="schedule-log-back-btn" class="btn-secondary">Back to Schedules</button></div><div class="schedule-empty">Could not load schedule log.</div><div class="modal-footer" style="margin-top:0.85rem;"><button type="button" class="btn-secondary" onclick="window.closeScheduleModal()">Cancel</button></div>';
             backBtn = document.getElementById("schedule-log-back-btn");
             if (backBtn) {
               backBtn.onclick = function () {
