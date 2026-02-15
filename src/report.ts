@@ -43,6 +43,7 @@ export interface HistoricalRunSummary {
 function extractionResultFilenameFromRecord(record: {
   relativePath: string;
   brand: string;
+  purchaser?: string;
 }): string {
   const safe = record.relativePath
     .replaceAll("/", "_")
@@ -145,6 +146,7 @@ function filterExtractionResultsForRun(
       extractionResultFilenameFromRecord({
         relativePath: r.relative_path,
         brand: r.brand,
+        purchaser: r.purchaser ?? undefined,
       }),
     ),
   );
@@ -240,7 +242,11 @@ export function loadHistoricalRunSummaries(
     const purchaserSet = new Set<string>();
     for (const r of records) {
       if (r.brand) brandSet.add(r.brand);
-      if (r.relativePath) {
+      if (r.purchaser) {
+        // Prefer explicit purchaser from record
+        purchaserSet.add(r.purchaser);
+      } else if (r.relativePath) {
+        // Fallback: infer from relativePath (legacy)
         const firstSegment = r.relativePath.split(/[\\/]/)[0];
         if (firstSegment) purchaserSet.add(firstSegment);
       }
@@ -478,24 +484,23 @@ function sectionForRun(entry: HistoricalRunSummary): string {
   const failedCount = entry.extractionResults.filter(
     (e) => !e.extractionSuccess,
   ).length;
-  // Reclassify successes as failures when API response.success === false,
-  // but always keep total processed = m.success + m.failed.
-  const reclassifiedFailuresFromResponses = failedCount;
-  const displaySuccess = Math.max(
-    0,
-    m.success - reclassifiedFailuresFromResponses,
-  );
+  // Reclassify successes as failures when API response.success === false.
+  // We partition "processed" into 3 disjoint sets:
+  // 1. displaySuccess: Status=Done AND JSON success=true
+  // 2. displayApiFailed: Status=Done AND JSON success=false (or missing)
+  // 3. displayInfraFailed: Status=Error
+  const displaySuccess = succeededCount;
   const displayInfraFailed = m.failed;
-  const displayApiFailed = reclassifiedFailuresFromResponses;
+  const displayApiFailed = Math.max(0, m.success - displaySuccess);
   const processed = m.success + m.failed;
   const throughputPerSecond =
     entry.runDurationSeconds > 0 ? processed / entry.runDurationSeconds : 0;
   const throughputPerMinute = throughputPerSecond * 60;
   const totalApiTime = formatDuration(m.totalProcessingTimeMs);
-  const displayErrorRate =
-    processed > 0
-      ? (displayInfraFailed + displayApiFailed) / processed
-      : m.errorRate;
+  // Error rate = Infrastructure failures / Total processed.
+  // Logical failures (API success: false) are NOT counted as system errors.
+  const displayErrorRate = processed > 0 ? displayInfraFailed / processed : 0;
+  const falseResponseRate = processed > 0 ? displayApiFailed / processed : 0;
   const anomalyItems = m.anomalies.map((a) => {
     const pathSuffix = a.filePath ? " (" + escapeHtml(a.filePath) + ")" : "";
     return (
@@ -671,7 +676,8 @@ function sectionForRun(entry: HistoricalRunSummary): string {
     <tr><td>Run duration (wall clock)</td><td>${runDuration}</td></tr>
     <tr><td>Throughput</td><td>${throughputPerSecond.toFixed(2)} files/sec, ${throughputPerMinute.toFixed(2)} files/min</td></tr>
     <tr><td>Total API time (sum of request latencies)</td><td>${totalApiTime}</td></tr>
-    <tr><td>Error rate</td><td>${(displayErrorRate * 100).toFixed(2)}%</td></tr>
+    <tr><td>Error rate (Infrastructure failures)</td><td>${(displayErrorRate * 100).toFixed(2)}%</td></tr>
+    <tr><td>False Response Rate (API success: false)</td><td>${(falseResponseRate * 100).toFixed(2)}%</td></tr>
   </table>
   <h3>Load testing / API capability</h3>
   <p>Use these as a guide for batch sizes and expected capacity at similar concurrency and file mix.</p>
@@ -679,12 +685,13 @@ function sectionForRun(entry: HistoricalRunSummary): string {
     <tr><th>Attribute</th><th>Value</th></tr>
     <tr><td>Observed throughput</td><td>${throughputPerMinute.toFixed(1)} files/min, ${throughputPerSecond.toFixed(2)} files/sec</td></tr>
     <tr><td>API response time (P50 / P95 / P99)</td><td>${m.p50LatencyMs.toFixed(0)} ms / ${m.p95LatencyMs.toFixed(0)} ms / ${m.p99LatencyMs.toFixed(0)} ms</td></tr>
-    <tr><td>Error rate at this load</td><td>${(m.errorRate * 100).toFixed(2)}%</td></tr>
+    <tr><td>Error rate at this load (Infra failures)</td><td>${(displayErrorRate * 100).toFixed(2)}%</td></tr>
+    <tr><td>False Response Rate at this load</td><td>${(falseResponseRate * 100).toFixed(2)}%</td></tr>
     <tr><td>Ideal extract count (≈5 min run)</td><td>~${Math.round(throughputPerMinute * 5)} files</td></tr>
     <tr><td>Ideal extract count (≈10 min run)</td><td>~${Math.round(throughputPerMinute * 10)} files</td></tr>
     <tr><td>Ideal extract count (≈15 min run)</td><td>~${Math.round(throughputPerMinute * 15)} files</td></tr>
   </table>
-  <p><strong>Summary:</strong> At this run&rsquo;s load, the API handled <strong>${processed} files</strong> in <strong>${runDuration}</strong> with <strong>${(displayErrorRate * 100).toFixed(2)}%</strong> total errors. For a target run of about 5 minutes, aim for batches of <strong>~${Math.round(throughputPerMinute * 5)} files</strong>; for 10 minutes, <strong>~${Math.round(throughputPerMinute * 10)} files</strong>.</p>
+  <p><strong>Summary:</strong> At this run&rsquo;s load, the API handled <strong>${processed} files</strong> in <strong>${runDuration}</strong> with <strong>${(displayErrorRate * 100).toFixed(2)}%</strong> infrastructure errors and <strong>${(falseResponseRate * 100).toFixed(2)}%</strong> false responses. For a target run of about 5 minutes, aim for batches of <strong>~${Math.round(throughputPerMinute * 5)} files</strong>; for 10 minutes, <strong>~${Math.round(throughputPerMinute * 10)} files</strong>.</p>
   <h3>Latency (ms)</h3>
   <table>
     <tr><th>Percentile</th><th>Value</th></tr>

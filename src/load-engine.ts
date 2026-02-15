@@ -40,6 +40,7 @@ export interface FileJob {
   filePath: string;
   relativePath: string;
   brand: string;
+  purchaser?: string;
 }
 
 export interface LoadEngineResult {
@@ -146,17 +147,77 @@ function discoverStagingFiles(
     const subdir = getStagingSubdir(bucket);
     const brandDir = join(stagingDir, subdir);
     if (!existsSync(brandDir)) continue;
-    const walk = (dir: string) => {
-      const entries = readdirSync(dir, { withFileTypes: true });
-      for (const e of entries) {
-        const full = join(dir, e.name);
-        const rel = relative(brandDir, full);
-        if (e.isDirectory()) walk(full);
-        else
-          jobs.push({ filePath: full, relativePath: rel, brand: bucket.name });
-      }
-    };
-    walk(brandDir);
+
+    // If bucket config specifies a purchaser, ONLY scan that purchaser's subdirectory.
+    // Otherwise scan indefinitely? No, the structure is staging/<brand>/<purchaser>/...
+    // If no purchaser specified in config, we might scan all.
+    // However, the issue is that "purchaser 1" config might share the same brand bucket as "purchaser 2".
+    // We must respect bucket.purchaser if present.
+
+    const targetDirs: { dir: string; purchaser?: string }[] = [];
+
+    if (bucket.purchaser) {
+      // Scoped to specific purchaser
+      targetDirs.push({
+        dir: join(brandDir, bucket.purchaser),
+        purchaser: bucket.purchaser,
+      });
+    } else {
+      // Scan all direct subdirectories of brandDir as purchasers?
+      // Or just walk brandDir?
+      // If we walk brandDir directly, we might pick up multiple purchasers.
+      // We should probably try to infer purchaser from the first level subdir if possible.
+      // For now, let's keep original behavior but try to infer purchaser if we benefit from it.
+      // BUT: The bug states "leakage".
+      // If I configure "Purchaser 1", I get a bucket config with purchaser="purchaser1".
+      // Then I should ONLY scan brandDir/purchaser1.
+      // The previous code scanned `brandDir` recursively, effectively ignoring `bucket.purchaser`.
+      // EXISTING CODE WAS:
+      // const brandDir = join(stagingDir, subdir);
+      // const walk = (dir: string) => ...
+      // walk(brandDir);
+      // This is the bug. It walks the whole brand directory regardless of bucket.purchaser!
+
+      // FIX:
+      targetDirs.push({ dir: brandDir });
+    }
+
+    for (const { dir: startDir, purchaser: forcedPurchaser } of targetDirs) {
+      if (!existsSync(startDir)) continue;
+
+      const walk = (dir: string) => {
+        const entries = readdirSync(dir, { withFileTypes: true });
+        for (const e of entries) {
+          const full = join(dir, e.name);
+          if (e.isDirectory()) {
+            walk(full);
+          } else {
+            // Infer purchaser if not forced and we are deeper than brandDir
+            let purchaser = forcedPurchaser;
+            if (!purchaser) {
+              // try to infer from relative path from brandDir
+              // schema: brandDir/PURCHASER/file.ext
+              const relFromBrand = relative(brandDir, full);
+              const parts = relFromBrand.split(/[\\/]/);
+              if (parts.length > 1) {
+                purchaser = parts[0];
+              }
+            }
+            // relativePath should probably be relative to brandDir?
+            // Original code: relative(brandDir, full). This includes purchaser folder in path.
+            // That is correct for syncing back?
+            const rel = relative(brandDir, full);
+            jobs.push({
+              filePath: full,
+              relativePath: rel,
+              brand: bucket.name,
+              purchaser,
+            });
+          }
+        }
+      };
+      walk(startDir);
+    }
   }
   return jobs;
 }
@@ -227,6 +288,7 @@ export async function extractOneFile(
     filePath: job.filePath,
     relativePath: job.relativePath,
     brand: job.brand,
+    purchaser: job.purchaser,
     status: "running",
     startedAt: started,
     runId,
@@ -241,6 +303,7 @@ export async function extractOneFile(
       filePath: job.filePath,
       relativePath: job.relativePath,
       brand: job.brand,
+      purchaser: job.purchaser,
       status: "error",
       startedAt: started,
       finishedAt: new Date().toISOString(),
@@ -301,6 +364,7 @@ export async function extractOneFile(
     filePath: job.filePath,
     relativePath: job.relativePath,
     brand: job.brand,
+    purchaser: job.purchaser,
     status,
     startedAt: started,
     finishedAt: new Date().toISOString(),
@@ -369,6 +433,7 @@ export async function runExtraction(
       filePath: job.filePath,
       relativePath: job.relativePath,
       brand: job.brand,
+      purchaser: job.purchaser,
       status: "skipped" as const,
       runId,
     }));
@@ -446,6 +511,7 @@ export async function runExtraction(
           filePath: job.filePath,
           relativePath: job.relativePath,
           brand: job.brand,
+          purchaser: job.purchaser,
           status: "running",
           startedAt: started,
           runId: runIdToUse,
@@ -460,6 +526,7 @@ export async function runExtraction(
             filePath: job.filePath,
             relativePath: job.relativePath,
             brand: job.brand,
+            purchaser: job.purchaser,
             status: "error",
             startedAt: started,
             finishedAt: new Date().toISOString(),
@@ -521,6 +588,7 @@ export async function runExtraction(
             filePath: job.filePath,
             relativePath: job.relativePath,
             brand: job.brand,
+            purchaser: job.purchaser,
             status,
             startedAt: started,
             finishedAt: new Date().toISOString(),
@@ -547,6 +615,7 @@ export async function runExtraction(
               filePath: job.filePath,
               relativePath: job.relativePath,
               brand: job.brand,
+              purchaser: job.purchaser,
               status: "error",
               startedAt: started,
               finishedAt: new Date().toISOString(),

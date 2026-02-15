@@ -40,6 +40,7 @@ interface CheckpointRow {
   error_message: string | null;
   pattern_key: string | null;
   run_id: string;
+  purchaser: string | null;
 }
 
 interface CheckpointStore {
@@ -180,6 +181,7 @@ function rowToRecord(r: CheckpointRow): CheckpointRecord {
     errorMessage: r.error_message ?? undefined,
     patternKey: r.pattern_key ?? undefined,
     runId: r.run_id,
+    purchaser: r.purchaser ?? undefined,
   };
 }
 
@@ -196,6 +198,7 @@ function recordToRow(record: CheckpointRecord): CheckpointRow {
     error_message: record.errorMessage ?? null,
     pattern_key: record.patternKey ?? null,
     run_id: record.runId,
+    purchaser: record.purchaser ?? null,
   };
 }
 
